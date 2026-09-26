@@ -171,3 +171,29 @@ test("the herd sustains itself: no extinction, no explosion, over a long run", (
     assert.ok(s.stats.deerStarved > 0 || s.stats.deerOld > 0, "deer die naturally too");
   }
 });
+
+// Regression: in an even meadow every neighbouring tile is equally near, and breaking that tie by scan
+// order sent every deer marching north, eating a dead-straight strip (and biasing whole herds northward).
+test("a grazing deer in an even meadow doesn't march in a line or drift in one direction", () => {
+  let sumDx = 0, sumDy = 0;
+  // A lone grazer wanders (a self-avoiding walk, about 5 tiles of spread per run), so averaging N runs
+  // leaves about 5/sqrt(N) of noise: with N=40, a threshold of 2.5 is ~3 standard errors. The old bug
+  // moved every run about 4 tiles the same way.
+  const N = 40;
+  for (let seed = 1; seed <= N; seed++) {
+    const s = meadow(seed);
+    s.world.grassGrowth.fill(0);
+    const d = deerAt(s, 40, 40, { energy: 300 });
+    d.lifespan = 1e9;
+    s.run(3000);
+    const bare = [];
+    for (let i = 0; i < s.grass.length; i++) if (s.grass[i] === 0) bare.push([i % s.world.width, Math.floor(i / s.world.width)]);
+    assert.ok(bare.length >= 15, `seed ${seed}: it should have eaten a fair amount (${bare.length})`);
+    const xs = bare.map((b) => b[0]), ys = bare.map((b) => b[1]);
+    const spanX = Math.max(...xs) - Math.min(...xs), spanY = Math.max(...ys) - Math.min(...ys);
+    assert.ok(spanX >= 3 && spanY >= 3, `seed ${seed}: grazed ground is a strip (${spanX + 1} x ${spanY + 1})`);
+    sumDx += xs.reduce((a, b) => a + b, 0) / xs.length - 40.5;
+    sumDy += ys.reduce((a, b) => a + b, 0) / ys.length - 40.5;
+  }
+  assert.ok(Math.abs(sumDx / N) < 2.5 && Math.abs(sumDy / N) < 2.5, `average drift (${(sumDx / N).toFixed(1)}, ${(sumDy / N).toFixed(1)}) tiles`);
+});

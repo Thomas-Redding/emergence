@@ -242,18 +242,22 @@ export class Sim {
   }
 
   // The nearest tile with enough grass, looking near first and then farther; null if none.
+  // Ties (very common in an even meadow) go to the lusher tile, then to a random one. Breaking ties
+  // by scan order instead would send every deer marching the same way, eating a straight line.
   findGrass(d) {
     const w = this.world, cx = Math.floor(d.x), cy = Math.floor(d.y);
     for (const R of [C.DEER_SEARCH_NEAR, C.DEER_SEARCH_FAR]) {
-      let best = null, bestD = Infinity;
+      let bestD = Infinity, bestGrass = -1, ties = [];
       for (let y = Math.max(0, cy - R); y <= Math.min(w.height - 1, cy + R); y++) {
         for (let x = Math.max(0, cx - R); x <= Math.min(w.width - 1, cx + R); x++) {
-          if (this.grass[y * w.width + x] < C.DEER_MIN_PATCH) continue;
+          const g = this.grass[y * w.width + x];
+          if (g < C.DEER_MIN_PATCH) continue;
           const dd = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-          if (dd < bestD) { bestD = dd; best = [x, y]; }
+          if (dd < bestD || (dd === bestD && g > bestGrass)) { bestD = dd; bestGrass = g; ties = [[x, y]]; }
+          else if (dd === bestD && g === bestGrass) ties.push([x, y]);
         }
       }
-      if (best) return best;
+      if (ties.length) return ties.length === 1 ? ties[0] : ties[this.rng.int(ties.length)];
     }
     return null;
   }
