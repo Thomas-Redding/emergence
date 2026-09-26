@@ -3,7 +3,7 @@ import { hashState } from "./sim/hash.js";
 import { makeInput, inputBrain, scriptedBrain } from "./sim/brains.js";
 import { TileMemory } from "./sim/memory.js";
 import { basicNpc } from "./npcs/basic.js";
-import { draw, zoomAt, screenToWorld, interpPos } from "./render/render.js";
+import { draw, zoomAt, screenToWorld, interpPos, panCamera } from "./render/render.js";
 import { buildHud } from "./ui/inventory.js";
 import { actionPlans, ACTION_KEYS, FAIL_TEXT } from "./ui/controls.js";
 import { hudHtml, renderHud } from "./ui/hud.js";
@@ -118,6 +118,7 @@ addEventListener("keydown", (e) => {
   if (k === "v") reveal = !reveal;
   keys.add(k); if (e.key.startsWith("Arrow")) e.preventDefault(); });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => { keys.clear(); taps.clear(); }); // a key released while unfocused never sends keyup
 
 // Feedback for the player: why did that key do nothing? Shown in the HUD for a couple of seconds.
 let hint = null; // { msg, tick }
@@ -210,6 +211,7 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   // While replaying, run flat out (still fixed ticks) to catch up quickly.
   const budget = replayLog ? 20000 : Math.min(now - last, 250) * speed;
+  const dt = Math.min(now - last, 100) / 1000; // seconds since the last frame, for camera motion
   acc += budget;
   last = now;
   const stepMs = replayLog ? 0 : 1000 / TICKS_PER_SEC;
@@ -224,6 +226,13 @@ function frame(now) {
   }
   if (replayLog) acc = 0;
   checkReplayDone();
+  // With no player character to steer (observer mode, or after it dies) WASD/arrows fly the camera.
+  if (playerId == null || !sim.byId(playerId)) {
+    const held = (...names) => names.some((n) => keys.has(n));
+    const px = (held("arrowright", "d") ? 1 : 0) - (held("arrowleft", "a") ? 1 : 0);
+    const py = (held("arrowdown", "s") ? 1 : 0) - (held("arrowup", "w") ? 1 : 0);
+    if (panCamera(cam, px, py, dt, keys.has("shift"), sim.world)) setFollow(false); // panning takes over from following
+  }
   const focus = sim.byId(selectedId ?? playerId);
   if (selectedId != null && !focus) selectedId = null; // it died or was eaten
   const interp = replayLog ? null : { prev: prevPos, alpha: Math.min(1, acc / (1000 / TICKS_PER_SEC)) };

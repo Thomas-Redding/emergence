@@ -25,6 +25,24 @@ export function zoomAt(cam, w, h, sx, sy, factor) {
   cam.y = wy - (sy - h / 2) / cam.zoom;
 }
 
+// Free-fly the camera: hold a direction (dirX, dirY in {-1,0,1}, diagonals are normalized).
+// Speed is constant on screen (PAN_SPEED px/s, x3 when fast), so it feels the same at any zoom, and it
+// scales with dt so it doesn't depend on frame rate. Stays inside `bounds` ({ width, height } of the
+// world) if given. Returns true if the camera was asked to move.
+export const PAN_SPEED = 600;
+export function panCamera(cam, dirX, dirY, dtSec, fast = false, bounds = null) {
+  const l2 = dirX * dirX + dirY * dirY;
+  if (!l2) return false;
+  const k = (PAN_SPEED * (fast ? 3 : 1) * dtSec) / cam.zoom / Math.sqrt(l2);
+  cam.x += dirX * k;
+  cam.y += dirY * k;
+  if (bounds) {
+    cam.x = Math.min(bounds.width, Math.max(0, cam.x));
+    cam.y = Math.min(bounds.height, Math.max(0, cam.y));
+  }
+  return true;
+}
+
 // Where to draw an entity: between where it was before the latest tick and where it is now.
 // interp = { prev: Map(id -> [x, y]), alpha in [0,1] }. Purely visual; never touches the sim.
 export function interpPos(e, interp) {

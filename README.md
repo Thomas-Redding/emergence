@@ -24,7 +24,7 @@ Open `http://localhost:8000/?seed=1` (any integer seed works).
 
 | Key | Action |
 |---|---|
-| WASD / arrows | move (hold two for diagonals) |
+| WASD / arrows | move (hold two for diagonals). With no character (observer mode, or after you die) they pan the camera instead; Shift pans faster |
 | Shift + move | sneak (slow and quiet) |
 | I J K L | turn to look without moving |
 | E | pick up the nearest item in reach |
