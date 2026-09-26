@@ -1,0 +1,9 @@
+{
+  "name": "emergence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "serve": "python3 server.py"
+  }
+}

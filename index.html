@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Emergence</title>
+<style>body{margin:0;background:#111;color:#ddd;font:14px sans-serif}canvas{display:block;position:fixed;inset:0;z-index:0}#hud{position:fixed;left:8px;bottom:8px;z-index:1;min-width:210px;padding:6px 8px;background:#000b;font-size:13px;line-height:1.35}#hud:empty{display:none}#hud .bar{height:5px;background:#333;margin:1px 0 3px}#hud .bar div{height:100%}#hud .dim{color:#999}#hud .warn{color:#ffb454;margin-top:4px}#ui{position:relative;z-index:1;padding:4px 6px;background:#000a;display:inline-block}</style>
+<div id="ui"><button id="speed">Speed x1</button> <button id="replay">Replay</button> <button id="mode"></button> <button id="follow">Follow: on</button> <span id="info"></span> <span id="status"></span>
+<div>Arrows/WASD move (Shift sneaks) · IJKL look · E pick up · hold Q sharpen · X stab (face the deer) · R make fire (2 sticks) · hold T tend fire · hold C cook · G eat</div><div>wheel/+/- zoom · drag pans · F follow · V reveal all (then click a creature) · observer mode: click a creature to follow it</div></div>
+<div id="hud"></div>
+<canvas id="c"></canvas>
+<script type="module" src="main.js"></script>
