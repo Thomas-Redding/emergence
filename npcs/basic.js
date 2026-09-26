@@ -1,5 +1,5 @@
 // Baseline NPC: make a spear, hunt a deer, build a fire, cook the meat, eat it.
-import { dist, held, around, nearest, walkNear, explore, facingToward } from "./lib.js";
+import { dist, held, around, nearest, walkNear, explore, facingToward, withMemory } from "./lib.js";
 
 // `mem` is the NPC's own memory (unreachable ids, where it built its fire): plain generator-local state.
 // It has to remember, because it only ever sees what's in front of it.
@@ -84,7 +84,7 @@ function* cook(obs, rng, mem) {
   return obs;
 }
 
-export function* basicNpc(obs, rng) {
+function* basicBrain(obs, rng) {
   const mem = { bad: new Set(), fire: null };
   while (true) {
     const cooked = held(obs, "cooked_meat")[0];
@@ -110,3 +110,6 @@ export function* basicNpc(obs, rng) {
     }
   }
 }
+
+// The baseline NPC: the brain above, with terrain memory so it doesn't forget what it just saw.
+export const basicNpc = withMemory(basicBrain);

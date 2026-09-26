@@ -104,3 +104,28 @@ test("stab requires facing the deer", () => {
   assert.deepEqual(results, ["not_facing_target", true]);
   assert.ok(d.removed || !s.byId(d.id));
 });
+
+// Regression: an NPC used to dither forever when a target sat behind a tree. It forgot the tree
+// whenever it turned away (unseen tiles read as walkable), so it flip-flopped between "go around"
+// and "go straight" on alternate ticks.
+test("baseline NPCs don't dither back and forth", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const s = game(seed, [basicNpc, basicNpc, basicNpc]);
+    const humans = s.entities.filter((e) => e.kind === "human");
+    const last = new Map(), reversals = new Map(humans.map((h) => [h.id, 0]));
+    const prev = new Map(humans.map((h) => [h.id, [h.x, h.y]]));
+    for (let t = 0; t < 800; t++) {
+      s.step();
+      for (const h of humans) {
+        if (h.removed) continue;
+        const [px, py] = prev.get(h.id), dx = h.x - px, dy = h.y - py;
+        prev.set(h.id, [h.x, h.y]);
+        if (dx === 0 && dy === 0) continue;
+        const l = last.get(h.id);
+        if (l && l[0] * dx + l[1] * dy < 0) reversals.set(h.id, reversals.get(h.id) + 1); // turned around
+        last.set(h.id, [dx, dy]);
+      }
+    }
+    for (const [id, n] of reversals) assert.ok(n < 60, `seed ${seed} npc ${id}: ${n} reversals in 800 ticks`);
+  }
+});

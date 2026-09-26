@@ -2,6 +2,8 @@
 // Positions are real numbers in tile units; terrain is a grid, so pathing works on tiles and
 // steers toward real positions.
 
+import { TileMemory } from "../sim/memory.js";
+
 const TILE_DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
 export const dist = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
@@ -60,12 +62,48 @@ export function pathNext(obs, goal) {
   return null;
 }
 
+// Give any brain a memory of the terrain it has seen. The wrapped brain gets observations whose
+// unseen tiles ('?') are filled in from memory where it has been before, so what it saw a moment
+// ago doesn't vanish when it turns its head. (Without this an NPC dithers: it looks south, sees a
+// tree and turns back; looks north, forgets the tree and turns south again.) The merged
+// observation also carries obs.memory (a TileMemory) for brains that want more. Entities are not
+// remembered here: only terrain.
+export function withMemory(brainFn) {
+  return function* (obs, rng) {
+    const memory = new TileMemory();
+    memory.update(obs);
+    const inner = brainFn(mergeMemory(obs, memory), rng);
+    let r = inner.next();
+    while (!r.done) {
+      obs = yield r.value;
+      memory.update(obs);
+      r = inner.next(mergeMemory(obs, memory));
+    }
+    return r.value;
+  };
+}
+
+function mergeMemory(obs, memory) {
+  const { x0, y0, tiles } = obs.view;
+  const merged = tiles.map((row, j) => {
+    if (!row.includes("?")) return row;
+    let out = "";
+    for (let i = 0; i < row.length; i++) out += row[i] !== "?" ? row[i] : memory.get(x0 + i, y0 + j)?.c ?? "?";
+    return out;
+  });
+  return { ...obs, view: { ...obs.view, tiles: merged }, memory };
+}
+
 // Generator helpers: use with `obs = yield* ...`. They return the latest observation.
 
-// Walk until within `within` of the point (tx,ty). Gives up after maxTicks or if unreachable.
-export function* walkNear(obs, tx, ty, { within = 0.9, sneak = false, maxTicks = 200 } = {}) {
+// Walk until within `within` of the point (tx,ty). Gives up if unreachable, after maxTicks, or if
+// it stops getting closer for `stall` ticks (dithering, or stuck behind something).
+export function* walkNear(obs, tx, ty, { within = 0.9, sneak = false, maxTicks = 200, stall = 80 } = {}) {
+  let best = Infinity, sinceBest = 0;
   for (let i = 0; i < maxTicks; i++) {
-    if (dist(obs.self, { x: tx, y: ty }) <= within) return obs;
+    const d = dist(obs.self, { x: tx, y: ty });
+    if (d <= within) return obs;
+    if (d < best - 0.25) { best = d; sinceBest = 0; } else if (++sinceBest > stall) return obs;
     const step = pathNext(obs, (x, y) => (x + 0.5 - tx) * (x + 0.5 - tx) + (y + 0.5 - ty) * (y + 0.5 - ty) <= within * within);
     if (!step) return obs;
     // In a qualifying tile: head straight for the point. Otherwise aim at the next tile's centre.
