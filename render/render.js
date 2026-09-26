@@ -1,7 +1,14 @@
 import { getAtlas, hash2, TUNIC_COUNT } from "./sprites.js";
 import { Animator } from "./animator.js";
+import { DEER_FAWN_TICKS } from "../sim/constants.js";
 
-const GROUND = { ".": ["#8fbf5a", "#8bba56", "#94c35f"], ",": ["#4c8a3a", "#478435", "#518f3f"] };
+// Lush ground colours (three variants for texture) and the bare colour a tile fades to when grazed out.
+const LUSH = { ".": [[143, 191, 90], [139, 186, 86], [148, 195, 95]], ",": [[76, 138, 58], [71, 132, 53], [81, 143, 63]] };
+const BARE = { ".": [186, 166, 106], ",": [112, 118, 70] };
+const groundColor = (kind, variant, frac) => {
+  const a = LUSH[kind][variant], b = BARE[kind], t = 1 - Math.max(0, Math.min(1, frac));
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+};
 const GROUND_ITEMS = new Set(["fire", "stick", "spear", "raw_meat", "cooked_meat"]);
 
 const animator = new Animator();
@@ -95,11 +102,19 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
       const [sx, sy] = pos(x, y);
       const hh = hash2(x, y);
       const ground = c === "." ? "." : ",";
-      ctx.fillStyle = GROUND[ground][hh % 3];
+      // How much grass is there? Straight from the sim in god view; from the character's observation
+      // when the tile is in view; remembered tiles just show a neutral-lush ground.
+      let frac = 0.8;
+      if (!memory) frac = sim.world.grassCap[y * width + x] ? sim.grass[y * width + x] / sim.world.grassCap[y * width + x] : 1;
+      else if (live) {
+        const gc = obs.view.grass[y - obs.view.y0][x - obs.view.x0];
+        frac = gc >= "0" && gc <= "9" ? Number(gc) / 9 : 1;
+      }
+      ctx.fillStyle = groundColor(ground, hh % 3, frac);
       // +1 overlap avoids hairline seams between tiles at fractional zooms.
       ctx.fillRect(Math.floor(sx), Math.floor(sy), Math.ceil(z) + 1, Math.ceil(z) + 1);
       if (z >= 10) { // ground detail
-        if (c === "." && hh % 5 === 0) blit(A.tuft, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
+        if (c === "." && hh % 5 === 0 && frac > 0.35) blit(A.tuft, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
         else if (c !== "." && hh % 4 === 0) blit(A.leaves, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
       }
       if (!live) { // remembered, not currently in view
@@ -174,7 +189,8 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
     if (e.kind === "human") animator.setAction(st, e.lastResult, time);
     const [sx, sy] = pos(ix, iy);
     if (e.id === opts.selectedId) selected = [sx, sy];
-    drawables.push({ key: iy + 0.3, fn: () => (e.kind === "human" ? drawHuman(e, st, sx, sy) : drawDeer(st, sx, sy)) });
+    const adult = e.adult ?? e.age >= DEER_FAWN_TICKS; // fawns are drawn smaller
+    drawables.push({ key: iy + 0.3, fn: () => (e.kind === "human" ? drawHuman(e, st, sx, sy) : drawDeer(st, sx, sy, adult)) });
   }
   drawables.sort((a, b) => a.key - b.key);
   for (const d of drawables) d.fn();
@@ -197,18 +213,19 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
     ctx.fill();
   }
 
-  function drawDeer(st, sx, sy) {
+  function drawDeer(st, sx, sy, adult) {
     if (Math.abs(st.fx) > 0.3) st.deerFlip = st.fx < 0; // sprite is side-on: face the last horizontal heading
-    shadow(sx, sy + 0.3 * z, 0.5);
+    const k = adult ? 1 : 0.62; // a fawn is a smaller deer
+    shadow(sx, sy + 0.3 * z, 0.5 * k);
     const bob = st.moving ? Math.abs(Math.sin(st.phase * Math.PI * 2)) * 0.03 * z : 0;
-    const img = A.deer[st.frame], fy = sy + 0.3 * z - bob;
+    const img = A.deer[st.frame], fy = sy + 0.3 * z - bob, sk = s * k;
     if (st.deerFlip) {
       ctx.save();
       ctx.translate(sx, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, -9 * s, fy - 14 * s, img.width * s, img.height * s);
+      ctx.drawImage(img, -9 * sk, fy - 14 * sk, img.width * sk, img.height * sk);
       ctx.restore();
-    } else ctx.drawImage(img, sx - 9 * s, fy - 14 * s, img.width * s, img.height * s);
+    } else ctx.drawImage(img, sx - 9 * sk, fy - 14 * sk, img.width * sk, img.height * sk);
   }
 
   function drawHuman(e, st, sx, sy) {

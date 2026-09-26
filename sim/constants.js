@@ -32,7 +32,6 @@ export const FLEE_TICKS = 12;
 export const DEER_WANDER_CHANCE = 0.03; // per tick, while resting: start a short walk
 export const DEER_WANDER_SPEED = 0.2;
 export const DEER_FLEE_SPEED = 0.9; // faster than a human's 0.5
-export const DEER_RESPAWN_EVERY = 500;
 export const STICK_DROP_CHANCE = 0.05;
 export const INITIAL_STICKS = 150; // drop attempts at world creation
 
@@ -41,3 +40,33 @@ export const INITIAL_STICKS = 150; // drop attempts at world creation
 export const SENSE_RADIUS = 1.5;
 export const HUMAN_FOV_COS = 0.342; // half-angle 70deg  -> 140deg cone
 export const DEER_FOV_COS = -0.866; // half-angle 150deg -> 300deg (blind spot straight behind)
+
+// ---- Grass: what deer eat. Each non-tree tile holds 0..cap units, regrowing slowly. ----
+export const GRASS_CAP_PLAINS = 20;
+export const GRASS_CAP_FOREST = 10; // forest floor is sparser
+export const GRASS_GROWTH_PLAINS = 2; // units regained per visit...
+export const GRASS_GROWTH_FOREST = 1;
+export const GRASS_REGROW_PERIOD = 1000; // ...and each tile is visited once per this many ticks (staggered)
+
+// ---- Deer life cycle. Time is in ticks (20 per second in the browser). ----
+export const DEER_ENERGY_MAX = 1000;
+export const DEER_METAB_EVERY = 4; // one energy lost per this many ticks (starve in ~4000 ticks)
+export const DEER_HUNGRY = 600; // start grazing below this...
+export const DEER_FULL = 950; // ...and stop at this
+export const DEER_BITE = 1; // grass units eaten per tick while grazing
+export const DEER_ENERGY_PER_GRASS = 2;
+export const DEER_MIN_PATCH = 3; // a tile is worth walking to if it has at least this much
+export const DEER_SEARCH_NEAR = 8; // tiles: look this far for grass first, then...
+export const DEER_SEARCH_FAR = 20; // ...this far
+export const DEER_GRAZE_SPEED = 0.25; // tiles per tick when walking to grass
+export const DEER_ROAM_TICKS = 60; // a starving deer with no grass in range walks this long (+ up to as much again) in one direction
+export const DEER_FAWN_TICKS = 1500; // age at which a fawn becomes an adult
+export const DEER_LIFESPAN_MIN = 20000; // old-age death is rolled per deer in [MIN, MIN + SPREAD)
+export const DEER_LIFESPAN_SPREAD = 10000;
+export const DEER_BREED_ENERGY = 800; // must be at least this well fed to breed
+export const DEER_BREED_CHANCE = 0.0025; // per tick once eligible
+export const DEER_BREED_COOLDOWN = 2500;
+export const DEER_BIRTH_COST = 250; // energy the parent spends
+export const DEER_FAWN_ENERGY = 500;
+export const DEER_MATE_RADIUS = 20; // an adult deer must have another adult within this many tiles to breed
+export const DEER_MAX = 300; // safety cap so a runaway can't stall the sim

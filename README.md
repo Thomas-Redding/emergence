@@ -48,6 +48,7 @@ The HUD along the bottom shows a food bar, an inventory hotbar (sprite icons, st
 - **Food** falls by 1 every 2 ticks from 1000; you starve at 0. Cooked meat restores 500.
 - **Crafting:** sharpening takes 200 ticks, lighting a fire 30, a lit fire burns 800, and cooking takes 60. Progress is stored on the item or fire in the world (never on the actor), so putting a stick down and picking it up again loses nothing.
 - **Vision is limited.** A human sees a 140° cone in front of them out to 10 tiles, and trees block line of sight. Anything within 1.5 tiles is always noticed. Deer see 300°, so their only blind spot is straight behind them.
+- **The deer have a life cycle, and a food supply.** Every non-tree tile holds grass (plains up to 20 units, forest up to 10) that regrows slowly and is eaten down by grazing. A deer has energy that drains steadily; below a threshold it walks to the nearest decent patch and grazes until full, and it starves at zero. Fawns take 1,500 ticks to become adults, and adults die of old age at a randomly rolled 20,000–30,000 ticks. A well-fed adult with another adult nearby can breed (with a cooldown and an energy cost), and the fawn starts small. There is no population cap and no respawn timer: **the herd is limited only by the grass**, so the herd finds its own size (it varies with the map, from a few dozen to a couple of hundred) and can boom and bust. Humans hunting them is the only predation.
 - **Hunting.** A deer hears normal footsteps from 6 tiles away in any direction (30% chance per tick to notice). A *sneaking* human is only noticed if a deer can actually see them, within 2 tiles (3% per tick). So: approach from behind, sneaking. To stab you must hold a spear, be within 1.2 tiles, and face the deer.
 
 ## How it is built
@@ -68,7 +69,8 @@ render/    Canvas rendering: render.js, sprites.js (pixel art drawn in code), an
 main.js    browser client: input, camera, replay button
 ui/        the HUD: controls.js (what is possible now), inventory.js (HUD as data), hud.js (HTML)
 server.py  a minimal static file server
-tests/     determinism, NPC, vision, replay, memory, animation
+tools/     ecosystem.mjs: a headless population harness (see below)
+tests/     determinism, NPC, vision, replay, memory, animation, HUD, ecosystem
 ```
 
 ### Determinism
@@ -113,7 +115,8 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
            inventory: [{ id, kind, ...progress }] },
   view:  { radius, x0, y0,                                // window of tiles around you
            tiles: ["..,T?", ...],                         // '.' plains ',' forest 'T' tree
-           entities: [{ id, kind, x, y, ... }] },         // '?' = not visible right now
+           grass: ["98-30", ...],                         // '0'..'9' grass now, '-' none; '?' = not visible right now
+           entities: [{ id, kind, x, y, ... }] },         // deer also carry adult: true/false
   lastResult: { ok, reason?, action } }
 ```
 
@@ -143,6 +146,14 @@ const sim = replay(makeSim, log, ticks);   // makeSim(humanBrain) builds the sam
 ```
 
 `sim.observe(id)` returns exactly what that actor's brain would receive, and the client draws the player's screen from it, so the player sees no more than their character can perceive. `TileMemory` (`sim/memory.js`) keeps the most recent state of every tile a character has seen; the player's map shows what is visible now plus what it remembers, and everything else stays blank.
+
+### Watching the ecosystem
+
+```bash
+node tools/ecosystem.mjs [seeds=6] [ticks=100000] [npcs=0]
+```
+
+runs the world headless for a long time and prints the deer population over time, the herd's min and max, how much grass is left, and births, starvations, old-age deaths and kills per seed. Use it to check a change to the deer or grass constants (`sim/constants.js`) hasn't led to extinction or a runaway herd. Add NPCs to see how much hunting matters.
 
 ## Not built yet
 

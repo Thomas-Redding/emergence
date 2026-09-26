@@ -1,4 +1,5 @@
 import { makeRng, deriveSeed } from "./rng.js";
+import { GRASS_CAP_PLAINS, GRASS_CAP_FOREST, GRASS_GROWTH_PLAINS, GRASS_GROWTH_FOREST } from "./constants.js";
 
 export const PLAINS = 0;
 export const FOREST = 1;
@@ -39,5 +40,13 @@ export function generateWorld(seed, width, height) {
       }
     }
   }
-  return { width, height, terrain, treeAt, trees };
+
+  // How much grass each tile can hold (none under trees) and how fast it regrows.
+  const grassCap = new Uint8Array(width * height), grassGrowth = new Uint8Array(width * height);
+  for (let i = 0; i < grassCap.length; i++) {
+    if (treeAt[i]) continue;
+    grassCap[i] = terrain[i] === FOREST ? GRASS_CAP_FOREST : GRASS_CAP_PLAINS;
+    grassGrowth[i] = terrain[i] === FOREST ? GRASS_GROWTH_FOREST : GRASS_GROWTH_PLAINS;
+  }
+  return { width, height, terrain, treeAt, trees, grassCap, grassGrowth };
 }

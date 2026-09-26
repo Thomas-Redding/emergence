@@ -21,9 +21,10 @@ export class Sim {
     this.humanIds = []; // actors added with { record: true }: the ones a person (or a replay) drives
     this.inputLog = []; // [{ tick, actor, action }] of every non-wait action by a recorded brain:
     //                     with the seed and the setup, everything needed to replay a session
-    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0 };
-    this.deerTarget = Math.floor((width * height * DEER_PER_1000_TILES) / 1000);
-    for (let i = 0; i < this.deerTarget; i++) this.spawnDeerRandom();
+    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
+    this.grass = Uint8Array.from(this.world.grassCap); // the world starts lush; deer graze it down
+    const startingDeer = Math.floor((width * height * DEER_PER_1000_TILES) / 1000);
+    for (let i = 0; i < startingDeer; i++) this.spawnDeerRandom();
     for (let i = 0; i < C.INITIAL_STICKS; i++) this.dropStick(); // the forest floor starts with some
   }
 
@@ -59,11 +60,23 @@ export class Sim {
     return moved;
   }
 
+  // A deer with its own life: energy, age, and a lifespan rolled now (deterministically).
+  spawnDeer(x, y, { age, energy }) {
+    return this.spawn("deer", x, y, {
+      facing: [0, 1], age, energy, lifespan: C.DEER_LIFESPAN_MIN + this.rng.int(C.DEER_LIFESPAN_SPREAD),
+      breedCooldown: 0, grazing: false, target: null,
+    });
+  }
+
+  // The starting herd: adults of assorted ages and fullness, scattered.
   spawnDeerRandom() {
     const { width, height } = this.world;
     for (let tries = 0; tries < 50; tries++) {
       const x = this.rng.int(width), y = this.rng.int(height);
-      if (this.isFree(x, y)) return this.spawn("deer", x + 0.5, y + 0.5, { facing: [0, 1] });
+      if (this.isFree(x, y)) {
+        const age = C.DEER_FAWN_TICKS + this.rng.int(C.DEER_LIFESPAN_MIN / 2);
+        return this.spawnDeer(x + 0.5, y + 0.5, { age, energy: 600 + this.rng.int(400) });
+      }
     }
   }
 
@@ -147,8 +160,17 @@ export class Sim {
   }
 
   stepDeer(humans) {
-    for (const d of this.entities) {
-      if (d.kind !== "deer" || d.removed) continue;
+    const deer = this.entities.filter((e) => e.kind === "deer" && !e.removed); // snapshot: newborns act next tick
+    this.liveDeer = deer.length;
+    for (const d of deer) {
+      // ---- life: age, hunger, death ----
+      d.age++;
+      if ((this.tick + d.id) % C.DEER_METAB_EVERY === 0) d.energy--;
+      if (d.breedCooldown > 0) d.breedCooldown--;
+      if (d.energy <= 0) { d.removed = true; this.stats.deerStarved++; continue; }
+      if (d.age >= d.lifespan) { d.removed = true; this.stats.deerOld++; continue; }
+
+      // ---- noticing humans ----
       if (!d.fleeTicks) {
         for (const h of humans) {
           const r = h.noisy ? C.NOISY_RADIUS : C.QUIET_RADIUS;
@@ -160,6 +182,8 @@ export class Sim {
           }
         }
       }
+
+      // ---- what to do this tick: flee > finish a walk > graze if hungry > rest/wander ----
       if (d.fleeTicks) {
         d.fleeTicks--;
         let threat = null;
@@ -170,14 +194,95 @@ export class Sim {
           const ux = l2 === 0 ? d.facing[0] : vx * k, uy = l2 === 0 ? d.facing[1] : vy * k;
           if (this.moveBody(d, ux * C.DEER_FLEE_SPEED, uy * C.DEER_FLEE_SPEED)) d.facing = [ux, uy];
         }
+      } else if (this.updateHunger(d) && this.eatHere(d)) {
+        d.moveTicks = 0; // hungry and standing on grass: eat it, whatever else it was doing
       } else if (d.moveTicks > 0) {
         d.moveTicks--;
         if (!this.moveBody(d, d.facing[0] * C.DEER_WANDER_SPEED, d.facing[1] * C.DEER_WANDER_SPEED)) d.moveTicks = 0;
-      } else if (this.rng.chance(C.DEER_WANDER_CHANCE)) {
-        d.facing = this.rng.unit();
-        d.moveTicks = 8 + this.rng.int(24);
-      }
+      } else if (d.grazing) this.graze(d);
+      else if (this.rng.chance(C.DEER_WANDER_CHANCE)) this.startWander(d, 8, 24);
+
+      this.maybeBreed(d);
     }
+  }
+
+  startWander(d, base, spread) {
+    d.facing = this.rng.unit();
+    d.moveTicks = base + this.rng.int(spread);
+  }
+
+  // Hysteresis: start grazing when hungry, stop when full. Returns whether it is grazing now.
+  updateHunger(d) {
+    if (d.energy < C.DEER_HUNGRY) d.grazing = true;
+    else if (d.energy >= C.DEER_FULL) d.grazing = false;
+    return d.grazing;
+  }
+
+  // Take a bite from the tile it is standing on, if it has any grass. Returns whether it ate.
+  eatHere(d) {
+    const ti = Math.floor(d.y) * this.world.width + Math.floor(d.x);
+    if (this.grass[ti] <= 0) return false;
+    const bite = Math.min(C.DEER_BITE, this.grass[ti]);
+    this.grass[ti] -= bite;
+    d.energy = Math.min(C.DEER_ENERGY_MAX, d.energy + bite * C.DEER_ENERGY_PER_GRASS);
+    d.target = null;
+    return true;
+  }
+
+  // Hungry and not on grass: walk to the nearest decent patch (or, if none is near, roam far).
+  graze(d) {
+    const w = this.world;
+    if (!d.target || this.grass[d.target[1] * w.width + d.target[0]] < C.DEER_MIN_PATCH) d.target = this.findGrass(d);
+    if (!d.target) { this.startWander(d, C.DEER_ROAM_TICKS, C.DEER_ROAM_TICKS); return; } // nothing near: set off across the map
+    const dx = d.target[0] + 0.5 - d.x, dy = d.target[1] + 0.5 - d.y, l2 = dx * dx + dy * dy;
+    if (l2 === 0) { d.target = null; return; }
+    const k = 1 / Math.sqrt(l2), ux = dx * k, uy = dy * k;
+    if (this.moveBody(d, ux * C.DEER_GRAZE_SPEED, uy * C.DEER_GRAZE_SPEED)) d.facing = [ux, uy];
+    else { d.target = null; this.startWander(d, 6, 10); } // blocked (a tree in the way): step aside, then look again
+  }
+
+  // The nearest tile with enough grass, looking near first and then farther; null if none.
+  findGrass(d) {
+    const w = this.world, cx = Math.floor(d.x), cy = Math.floor(d.y);
+    for (const R of [C.DEER_SEARCH_NEAR, C.DEER_SEARCH_FAR]) {
+      let best = null, bestD = Infinity;
+      for (let y = Math.max(0, cy - R); y <= Math.min(w.height - 1, cy + R); y++) {
+        for (let x = Math.max(0, cx - R); x <= Math.min(w.width - 1, cx + R); x++) {
+          if (this.grass[y * w.width + x] < C.DEER_MIN_PATCH) continue;
+          const dd = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+          if (dd < bestD) { bestD = dd; best = [x, y]; }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
+  // A well-fed adult with another adult nearby may have a fawn. The herd's size is limited only by
+  // the grass: no food, no energy to breed.
+  maybeBreed(d) {
+    if (d.age < C.DEER_FAWN_TICKS || d.breedCooldown > 0 || d.energy < C.DEER_BREED_ENERGY || d.fleeTicks) return;
+    if (this.liveDeer >= C.DEER_MAX || !this.rng.chance(C.DEER_BREED_CHANCE)) return;
+    const r2 = C.DEER_MATE_RADIUS * C.DEER_MATE_RADIUS;
+    let mate = false;
+    for (const o of this.entities) {
+      if (o !== d && o.kind === "deer" && !o.removed && o.age >= C.DEER_FAWN_TICKS && dist2(o, d) <= r2) { mate = true; break; }
+    }
+    if (!mate) return;
+    d.energy -= C.DEER_BIRTH_COST;
+    d.breedCooldown = C.DEER_BREED_COOLDOWN;
+    const [ux, uy] = this.rng.unit();
+    const fx = d.x + ux * 0.8, fy = d.y + uy * 0.8;
+    const at = this.canStand(fx, fy) ? [fx, fy] : [d.x, d.y];
+    this.spawnDeer(at[0], at[1], { age: 0, energy: C.DEER_FAWN_ENERGY });
+    this.liveDeer++;
+    this.stats.deerBorn++;
+  }
+
+  // A few tiles regain grass each tick, each tile once per GRASS_REGROW_PERIOD ticks (staggered).
+  growGrass() {
+    const cap = this.world.grassCap, growth = this.world.grassGrowth, g = this.grass, P = C.GRASS_REGROW_PERIOD;
+    for (let i = this.tick % P; i < g.length; i += P) if (g[i] < cap[i]) g[i] = Math.min(cap[i], g[i] + growth[i]);
   }
 
   dropStick() {
@@ -198,10 +303,7 @@ export class Sim {
     this.stepFires();
     this.stepDeer(humans.filter((h) => !h.removed));
     this.dropSticks();
-    if (this.tick % C.DEER_RESPAWN_EVERY === 0 &&
-        this.entities.filter((e) => e.kind === "deer" && !e.removed).length < this.deerTarget) {
-      this.spawnDeerRandom();
-    }
+    this.growGrass();
     if (this.entities.some((e) => e.removed)) {
       for (const e of this.entities) if (e.removed) this.byIdMap.delete(e.id);
       this.entities = this.entities.filter((e) => !e.removed);
