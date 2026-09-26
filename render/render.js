@@ -1,10 +1,9 @@
-import { buildAtlas, hash2, TUNIC_COUNT } from "./sprites.js";
+import { getAtlas, hash2, TUNIC_COUNT } from "./sprites.js";
 import { Animator } from "./animator.js";
 
 const GROUND = { ".": ["#8fbf5a", "#8bba56", "#94c35f"], ",": ["#4c8a3a", "#478435", "#518f3f"] };
 const GROUND_ITEMS = new Set(["fire", "stick", "spear", "raw_meat", "cooked_meat"]);
 
-let atlas = null;
 const animator = new Animator();
 let frameCount = 0;
 
@@ -41,7 +40,7 @@ export function interpPos(e, interp) {
 //    null when the character is dead: then only the remembered map is shown.
 // opts.time (ms) drives animation; opts.playerId marks the human player's character.
 export function draw(ctx, sim, cam, w, h, opts = {}) {
-  const A = (atlas ??= buildAtlas());
+  const A = getAtlas();
   const time = opts.time ?? 0;
   const obs = opts.viewObs, memory = opts.memory;
   const z = cam.zoom, s = z / 16; // s = screen pixels per sprite pixel

@@ -39,7 +39,7 @@ Open `http://localhost:8000/?seed=1` (any integer seed works).
 | F | toggle camera follow |
 | V | reveal everything, then click a creature to follow it |
 
-The HUD (bottom left) shows food, what you carry with sharpening/cooking progress, and a nearby fire. If a key does nothing it tells you why. **Speed** cycles ×1 / ×10 / ×100 and **Replay** re-runs your session from the seed and your inputs and reports whether it matched.
+The HUD along the bottom shows a food bar, an inventory hotbar (sprite icons, stack counts like "stick ×2", and progress bars on anything being sharpened or cooked; hover a slot for details), and a card for a fire you are next to. Above it is a row of keycaps for E Q X R T C G that light up only when that action is possible right now; greyed ones say why on hover, and a fresh press that can't be done shows the reason. Clicking a creature in god view shows its inventory the same way. **Speed** cycles ×1 / ×10 / ×100 and **Replay** re-runs your session from the seed and your inputs and reports whether it matched.
 
 ## The world and the rules
 
@@ -65,7 +65,8 @@ sim/       the simulation. No DOM or Canvas: runs headless in Node.
   rng.js hash.js constants.js
 npcs/      AI brains: basic.js (the baseline) and lib.js (helpers)
 render/    Canvas rendering: render.js, sprites.js (pixel art drawn in code), animator.js
-main.js    browser client: input, HUD, camera, replay button
+main.js    browser client: input, camera, replay button
+ui/        the HUD: controls.js (what is possible now), inventory.js (HUD as data), hud.js (HTML)
 server.py  a minimal static file server
 tests/     determinism, NPC, vision, replay, memory, animation
 ```

@@ -15,6 +15,13 @@ function near(sim, actor, id, kind, reach) {
   return dist2(e, actor) <= reach * reach ? e : null;
 }
 
+// Is the point (dx,dy) away from me within the cone of half-angle acos(minCos) around `facing`?
+// (Shared with the UI, so "can I stab now?" is answered by the same rule the sim enforces.)
+export function facingTarget(facing, dx, dy, minCos) {
+  const l2 = dx * dx + dy * dy;
+  return l2 === 0 || facing[0] * dx + facing[1] * dy >= minCos * Math.sqrt(l2);
+}
+
 // Any real, non-zero direction; the sim normalizes it (so NPCs can't cheat speed).
 function unitDir(a) {
   const dx = a.dx, dy = a.dy;
@@ -77,8 +84,7 @@ const HANDLERS = {
     if (![...sim.entities].some((e) => e.holder === a.id && e.kind === "spear" && !e.removed)) return fail("need_spear");
     const d = sim.byId(target);
     if (!d || d.removed || d.kind !== "deer" || dist2(d, a) > C.REACH.stab * C.REACH.stab) return fail("no_target_in_reach");
-    const dx = d.x - a.x, dy = d.y - a.y, l2 = dx * dx + dy * dy;
-    if (l2 > 0 && a.facing[0] * dx + a.facing[1] * dy < C.STAB_FACING_COS * Math.sqrt(l2)) return fail("not_facing_target");
+    if (!facingTarget(a.facing, d.x - a.x, d.y - a.y, C.STAB_FACING_COS)) return fail("not_facing_target");
     d.removed = true;
     sim.spawn("raw_meat", d.x, d.y, { cook: 0 });
     sim.stats.kills++;

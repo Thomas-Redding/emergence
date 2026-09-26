@@ -216,3 +216,18 @@ export function buildAtlas() {
   A.leaves = leaves();
   return A;
 }
+
+// One shared atlas, built on first use.
+let shared = null;
+export const getAtlas = () => (shared ??= buildAtlas());
+
+// A data: URL for an item's sprite, for HUD icons (shown pixelated by CSS).
+const icons = new Map();
+export function iconURL(kind) {
+  if (!icons.has(kind)) {
+    const A = getAtlas();
+    const c = { stick: A.stick, spear: A.spear, raw_meat: A.rawMeat, cooked_meat: A.cookedMeat, fire: A.fireLit[0] }[kind];
+    icons.set(kind, c ? c.toDataURL() : "");
+  }
+  return icons.get(kind);
+}

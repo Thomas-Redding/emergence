@@ -4,7 +4,9 @@ import { makeInput, inputBrain, scriptedBrain } from "./sim/brains.js";
 import { TileMemory } from "./sim/memory.js";
 import { basicNpc } from "./npcs/basic.js";
 import { draw, zoomAt, screenToWorld, interpPos } from "./render/render.js";
-import { REACH, SHARPEN_TICKS, FIRE_BUILD_TICKS, FIRE_FUEL, COOK_TICKS, FOOD_MAX } from "./sim/constants.js";
+import { buildHud } from "./ui/inventory.js";
+import { actionPlans, ACTION_KEYS, FAIL_TEXT } from "./ui/controls.js";
+import { hudHtml, renderHud } from "./ui/hud.js";
 
 const TICKS_PER_SEC = 20;
 const params = new URLSearchParams(location.search);
@@ -117,22 +119,9 @@ addEventListener("keydown", (e) => {
   keys.add(k); if (e.key.startsWith("Arrow")) e.preventDefault(); });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
-const dist = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
-
 // Feedback for the player: why did that key do nothing? Shown in the HUD for a couple of seconds.
 let hint = null; // { msg, tick }
 const say = (msg) => { hint = { msg, tick: sim.tick }; };
-const FAIL_TEXT = {
-  need_spear: "you need a sharpened spear to stab",
-  not_facing_target: "face the deer first (move toward it, or use IJKL)",
-  no_target_in_reach: "nothing in reach to stab",
-  no_lit_fire_in_reach: "you need to be next to a lit fire",
-  no_fire_in_reach: "no fire in reach",
-  need_two_sticks: "you need two sticks",
-  need_raw_meat: "you need raw meat",
-  not_edible: "only cooked meat is edible",
-  no_such_item: "nothing there to pick up",
-};
 
 function playerAction() {
   // Decide from what the character can perceive (its observation), like any brain would.
@@ -152,83 +141,30 @@ function playerAction() {
 
   // Only explain a do-nothing key on a fresh press; a held key finishing its job is not an error.
   const tip = (key, msg) => { if (taps.has(key)) say(msg); };
-  const mine = (kind) => me.inventory.filter((e) => e.kind === kind);
-  // Nearest visible matching thing within reach (not merely the first in the list).
-  const near = (pred, reach) => {
-    let best = null;
-    for (const e of obs.view.entities) {
-      if (!pred(e) || dist(e, me) > reach) continue;
-      if (!best || dist(e, me) < dist(e, best)) best = e;
-    }
-    return best;
-  };
-  if (k("e")) {
-    const it = near((e) => ["stick", "spear", "raw_meat", "cooked_meat"].includes(e.kind), REACH.pickup);
-    if (it) return { type: "pickup", item: it.id };
-    tip("e", FAIL_TEXT.no_such_item);
-  }
-  if (k("q")) { // hold: sharpen the most-progressed stick you're holding
-    const st = mine("stick").sort((a, b) => b.sharpness - a.sharpness)[0];
-    if (st) return { type: "sharpen", item: st.id };
-    tip("q", "you need a stick to sharpen");
-  }
-  if (k("x")) {
-    const d = near((e) => e.kind === "deer", REACH.stab);
-    if (d) return { type: "stab", target: d.id };
-    tip("x", FAIL_TEXT.no_target_in_reach);
-  }
-  if (k("r")) { // make a fire from two held sticks (least-sharpened first, to keep spear progress)
-    const st = mine("stick").sort((a, b) => a.sharpness - b.sharpness);
-    if (st.length >= 2) return { type: "make_fire", items: [st[0].id, st[1].id] };
-    tip("r", FAIL_TEXT.need_two_sticks);
-  }
-  if (k("t")) { // hold: tend an unlit fire until it catches
-    const f = near((e) => e.kind === "fire" && !e.lit, REACH.fire);
-    if (f) return { type: "tend", item: f.id };
-    tip("t", "no unlit fire in reach");
-  }
-  if (k("c")) { // hold: cook raw meat at a lit fire
-    const m = mine("raw_meat")[0], f = near((e) => e.kind === "fire" && e.lit, REACH.fire);
-    if (m && f) return { type: "cook", item: m.id, fire: f.id };
-    tip("c", !m ? FAIL_TEXT.need_raw_meat : FAIL_TEXT.no_lit_fire_in_reach);
-  }
-  if (k("g")) {
-    const m = mine("cooked_meat")[0];
-    if (m) return { type: "eat", item: m.id };
-    tip("g", "you have no cooked meat");
+  // Everything else is a plan computed from the observation (ui/controls.js), the same one the HUD
+  // shows: the first held key whose action is possible is sent; a fresh press that can't be done
+  // says why. (Only explain a do-nothing key on a fresh press; a held key finishing its job is not an error.)
+  const plans = actionPlans(obs);
+  for (const key of ACTION_KEYS) {
+    if (!k(key)) continue;
+    if (plans[key].action) return plans[key].action;
+    if (taps.has(key)) say(plans[key].why);
   }
   return null;
 }
 
-// HUD: your body, what you carry (with progress), and a fire you're next to.
+// HUD: built from an observation, so it only shows what that character knows.
 const hud = document.getElementById("hud");
-const bar = (f, color) => `<div class="bar"><div style="width:${Math.round(Math.max(0, Math.min(1, f)) * 100)}%;background:${color}"></div></div>`;
-const pct = (f) => `${Math.round(f * 100)}%`;
-// Built from an observation, so it shows only what that character knows.
-function hudHtml(obs) {
-  if (!obs) return playerId != null ? "<b>You starved.</b>" : "";
-  const a = obs.self;
-  let h = `<b>${a.id === playerId ? "You" : "human#" + a.id}</b><div>Food ${Math.round(a.food)} / ${FOOD_MAX}</div>${bar(a.food / FOOD_MAX, "#e0a030")}`;
-  const items = a.inventory;
-  if (!items.length) h += "<div class=dim>carrying nothing</div>";
-  for (const e of items) {
-    if (e.kind === "stick") h += e.sharpness > 0 ? `<div>stick · sharpening ${pct(e.sharpness / SHARPEN_TICKS)}</div>${bar(e.sharpness / SHARPEN_TICKS, "#c9a26a")}` : "<div>stick</div>";
-    else if (e.kind === "spear") h += "<div>spear · sharp</div>";
-    else if (e.kind === "raw_meat") h += e.cook > 0 ? `<div>raw meat · cooking ${pct(e.cook / COOK_TICKS)}</div>${bar(e.cook / COOK_TICKS, "#d04a4a")}` : "<div>raw meat</div>";
-    else if (e.kind === "cooked_meat") h += "<div>cooked meat · ready to eat</div>";
-  }
-  let fire = null;
-  for (const e of obs.view.entities) if (e.kind === "fire" && dist(e, a) <= REACH.fire && (!fire || dist(e, a) < dist(fire, a))) fire = e;
-  if (fire) h += fire.lit ? `<div>fire · burning</div>${bar(fire.fuel / FIRE_FUEL, "#ff7a1a")}` : `<div>fire · building ${pct(fire.progress / FIRE_BUILD_TICKS)}</div>${bar(fire.progress / FIRE_BUILD_TICKS, "#8a7a6a")}`;
-  if (a.id === playerId && hint && sim.tick - hint.tick < 60) h += `<div class=warn>${hint.msg}</div>`;
-  return h;
-}
-let lastHud = "";
 function updateHud() {
   const sel = sim.byId(selectedId);
   const targetId = sel && sel.kind === "human" ? sel.id : playerId;
-  const html = sel && sel.kind !== "human" ? "" : hudHtml(targetId == null ? null : sim.observe(targetId));
-  if (html !== lastHud) { hud.innerHTML = html; lastHud = html; }
+  if (sel && sel.kind !== "human") return renderHud(hud, ""); // a deer has no inventory
+  const obs = targetId == null ? null : sim.observe(targetId);
+  if (!obs) return renderHud(hud, playerId != null && targetId === playerId ? '<div class="card dead">You starved.</div>' : "");
+  const isPlayer = targetId === playerId;
+  const model = buildHud(obs, { isPlayer });
+  const showHint = isPlayer && hint && sim.tick - hint.tick < 60 ? hint.msg : null;
+  renderHud(hud, hudHtml(model, { title: isPlayer ? "You" : "human#" + targetId, hint: showHint }));
 }
 // Turn a failed player action into a hint (called after each live tick).
 function noteResult() {
