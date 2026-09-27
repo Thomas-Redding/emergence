@@ -84,3 +84,9 @@ export const TICKS_PER_SECOND = 20; // the browser's rate at speed x1: how ticks
 export const HUMAN_ADULT_TICKS = 4000; // a person is a child until this age (children matter once there are births)
 export const HUMAN_LIFESPAN_MIN = 60000; // old-age death is rolled per person in [MIN, MIN + SPREAD): 50-75 min at x1
 export const HUMAN_LIFESPAN_SPREAD = 30000;
+
+// ---- Speech: proposals between people (asking, and being answered) ----
+export const TALK_RANGE = 4; // you can only propose to, and answer, someone within this many tiles
+export const PROPOSAL_TICKS = 100; // an unanswered proposal expires after this long
+export const DECLINE_COOLDOWN = 200; // after "no", the same person can't ask the same person again for this long
+export const INBOX_MAX = 32; // events queued for a brain that never reads them are dropped, oldest first

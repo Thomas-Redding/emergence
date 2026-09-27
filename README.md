@@ -111,7 +111,7 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 
 ```
 { tick,
-  reach: { pickup, stab, fire, stabFacingCos },          // how close/aligned you must be
+  reach: { pickup, stab, fire, talk, stabFacingCos },    // how close/aligned you must be
   rules: { mealFood, foodPerTick, adultAge, lifespan: [lo, hi] },   // what food and age are worth
   self:  { id, x, y, facing: [fx, fy], age, food, foodMax,
            inventory: [{ id, kind, ...progress }] },
@@ -119,6 +119,8 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
            tiles: ["..,T?", ...],                         // '.' plains ',' forest 'T' tree
            grass: ["98-30", ...],                         // '0'..'9' grass now, '-' none; '?' = not visible right now
            entities: [{ id, kind, x, y, ... }] },         // deer and humans also carry adult: true/false
+  events: [ ... ],                                       // one-shot notices since your last observation (see Speech)
+  proposals: { incoming: [...], outgoing: {...} | null }, // the standing state of asking and being asked
   lastResult: { ok, reason?, action } }
 ```
 
@@ -136,6 +138,31 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 | `tend {item}` | +1 progress on a fire within `reach.fire` |
 | `cook {item, fire}` | +1 progress on held raw meat next to a lit fire |
 | `eat {item}` | eat cooked meat |
+
+#### Speech: asking, and being answered
+
+People can ask each other things. Speech is a **side channel**: any action can carry one optional message alongside it, so talking never costs your action for the tick.
+
+```js
+yield { type: "move", dx, dy, propose: { to: 144, kind: "mate" } };   // ask 144 something while walking
+yield { type: "wait", respond: { to: 141, accept: true } };            // answer 141, who asked you
+```
+
+- **`propose {to, kind}`**: needs the other person within `reach.talk` (4 tiles) and in your view. You can have one proposal out at a time; it expires after `rules.proposalTicks` (100). After a "no", you can't ask the same person again for 200 ticks.
+- **`respond {to, accept}`**: `to` is the person who asked you. You have to be within talking range to answer; if you aren't, it fails but the proposal stays open until it expires.
+- One message per tick. Speech takes effect at the *end* of the tick, after everyone has acted, so nothing depends on who happened to act first: the other person hears about it on the next tick, and a proposal can't be answered in the tick it was made.
+- **It is private.** Only the two people involved ever see it.
+- What happens on "yes" depends on the `kind`. (`"mate"` is recognised but doesn't do anything yet.)
+
+You hear about it two ways. `obs.events` are one-shot notices that arrive once, in your next observation; `obs.proposals` is the standing state (present until resolved), so a brain that was busy can still see what is pending:
+
+```
+events: [ { type: "proposal",        id, kind, from, expires },       // someone is asking you
+          { type: "proposal_sent",   id, kind, to, expires },         // yours went out
+          { type: "proposal_result", id, kind, with, outcome, reason? },   // accepted | declined | expired | invalid | gone
+          { type: "speech_failed",   speech, reason } ]               // out_of_range, not_visible, already_pending, cooldown, ...
+proposals: { incoming: [{ id, kind, from, expires }], outgoing: { id, kind, to, expires } | null }
+```
 
 `npcs/basic.js` is a complete example, and `npcs/forager.js` builds on its parts with a different top-level policy about *when* to hunt and eat: `basic` eats whenever food < 800 (wasting up to 300 of each 500-food meal) and hunts whenever food < 900 even with cooked meat in its pack, so it kills nearly twice what it needs and, in a group, collapses the herd it lives on (with 8 NPCs only 36% are alive after 15,000 ticks). `forager` eats only when a whole meal fits and hunts only when the energy it carries (food plus meat) is below a two-meal reserve: it kills exactly what it eats, and 91% of 8 NPCs survive with a healthy herd (9 NPCs: 93%; 12: 71%). `npcs/lib.js` has helpers (tile pathfinding that steers to real positions, `walkNear`, `explore`, ...).
 

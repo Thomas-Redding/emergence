@@ -27,6 +27,14 @@ export class Sim {
     this.inputLog = []; // [{ tick, actor, action }] of every non-wait action by a recorded brain:
     //                     with the seed and the setup, everything needed to replay a session
     this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deathsStarved: 0, deathsOld: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
+    // Speech: pending proposals, and who is on a "no" cooldown. (Both are world state, so both are hashed.)
+    this.proposals = []; // [{ id, kind, from, to, createdTick, expires }] in creation order
+    this.nextProposalId = 1;
+    this.declineUntil = new Map(); // "from:to" -> tick before which `from` can't ask `to` again
+    this.speechQueue = []; // speech from this tick's actions, resolved after everyone has acted
+    // What each kind of proposal does when accepted. accept(sim, proposer, recipient) -> { ok, reason? }.
+    // (Slice 1 of births: "mate" exists but does nothing yet. Tests register their own kinds here.)
+    this.proposalKinds = new Map([["mate", { accept: () => ({ ok: false, reason: "not_implemented" }) }]]);
     this.grass = Uint8Array.from(this.world.grassCap, (c) => Math.round(c * startingGrass));
     const herd = startingDeer ?? Math.floor((width * height * C.DEER_START_PER_1000_TILES) / 1000);
     for (let i = 0; i < herd; i++) this.spawnDeerRandom();
@@ -108,7 +116,7 @@ export class Sim {
     [x, y] = this.findFreeNear(x, y);
     // tally: what this actor has achieved (for benchmarking brains against each other). It only counts
     // things that already happened in the world, so it isn't part of the state hash.
-    const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 } });
+    const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 }, inbox: [] });
     a.born = this.tick - age; // age is this.tick - born
     a.lifespan = lifespan ?? this.humanLifespanMin + makeRng(deriveSeed(this.seed, "life" + a.id)).int(this.humanLifespanSpread);
     this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record });
@@ -135,6 +143,7 @@ export class Sim {
     const b = this.brains.get(a.id);
     if (!b || b.dead) return { type: "wait" };
     const obs = observe(this, a);
+    a.inbox.length = 0; // one-shot events are delivered exactly once, with this observation
     let action;
     try {
       let r;
@@ -144,7 +153,8 @@ export class Sim {
       } else r = b.gen.next(obs);
       if (r.done) { b.dead = true; return { type: "wait" }; }
       action = r.value;
-      if (b.record && action && action.type !== "wait") {
+      const speaks = action && typeof action === "object" && (action.propose !== undefined || action.respond !== undefined);
+      if (b.record && action && (action.type !== "wait" || speaks)) { // (a wait can still carry speech)
         this.inputLog.push({ tick: this.tick, actor: a.id, action: JSON.parse(JSON.stringify(action)) });
       }
     } catch (err) {
@@ -157,7 +167,11 @@ export class Sim {
 
   stepActor(a) {
     a.noisy = false;
-    a.lastResult = applyAction(this, a, this.think(a));
+    const action = this.think(a);
+    a.lastResult = applyAction(this, a, action);
+    if (action && typeof action === "object" && (action.propose !== undefined || action.respond !== undefined)) {
+      this.speechQueue.push({ from: a.id, action }); // speech rides along with the action; resolved at the end of the tick
+    }
     if (this.tick % C.FOOD_DECAY_EVERY === 0 && --a.food <= 0) this.killPerson(a, "starvation");
     else if (this.tick - a.born >= a.lifespan) this.killPerson(a, "old_age");
   }
@@ -171,6 +185,77 @@ export class Sim {
     if (cause === "starvation") this.stats.deathsStarved++;
     else this.stats.deathsOld++;
     for (const e of this.entities) if (e.holder === a.id) { e.holder = null; e.x = a.x; e.y = a.y; }
+    for (const p of this.proposals.filter((q) => q.from === a.id || q.to === a.id)) this.closeProposal(p, "gone");
+  }
+
+  // ---------------- speech: propose / respond ----------------
+  // Queue an event for someone's next observation (private to them).
+  emit(person, event) {
+    person.inbox.push(event);
+    if (person.inbox.length > C.INBOX_MAX) person.inbox.shift();
+  }
+
+  // End a pending proposal with an outcome, telling both people (whoever is still around).
+  closeProposal(p, outcome, reason) {
+    this.proposals.splice(this.proposals.indexOf(p), 1);
+    const note = (who, other) => {
+      const person = this.byId(who);
+      if (person && !person.removed) this.emit(person, { type: "proposal_result", id: p.id, kind: p.kind, with: other, outcome, ...(reason ? { reason } : {}) });
+    };
+    note(p.from, p.to);
+    note(p.to, p.from);
+  }
+
+  expireProposals() {
+    for (const p of this.proposals.filter((q) => this.tick >= q.expires)) this.closeProposal(p, "expired");
+  }
+
+  // Speech takes effect after everyone has acted, so it doesn't matter who happened to act first.
+  resolveSpeech() {
+    const queue = this.speechQueue;
+    this.speechQueue = [];
+    for (const { from, action } of queue) {
+      const a = this.byId(from);
+      if (!a || a.removed) continue;
+      const proposes = action.propose !== undefined, responds = action.respond !== undefined;
+      if (proposes && responds) this.emit(a, { type: "speech_failed", speech: "both", reason: "one_message_per_tick" });
+      else if (proposes) this.propose(a, action.propose);
+      else this.respond(a, action.respond);
+    }
+  }
+
+  propose(a, p) {
+    const fail = (reason) => this.emit(a, { type: "speech_failed", speech: "propose", reason });
+    if (!p || typeof p !== "object" || !Number.isInteger(p.to) || typeof p.kind !== "string") return fail("bad_speech");
+    if (!this.proposalKinds.has(p.kind)) return fail("unknown_kind");
+    const b = this.byId(p.to);
+    if (!b || b.removed || b.kind !== "human" || b === a) return fail("no_such_person");
+    if (dist2(a, b) > C.TALK_RANGE * C.TALK_RANGE) return fail("out_of_range");
+    if (!canSeePoint(this, a, b.x, b.y, C.TALK_RANGE)) return fail("not_visible");
+    if (this.proposals.some((q) => q.from === a.id)) return fail("already_pending");
+    const until = this.declineUntil.get(a.id + ":" + b.id);
+    if (until !== undefined && this.tick < until) return fail("cooldown");
+    const proposal = { id: this.nextProposalId++, kind: p.kind, from: a.id, to: b.id, createdTick: this.tick, expires: this.tick + C.PROPOSAL_TICKS };
+    this.proposals.push(proposal);
+    this.emit(b, { type: "proposal", id: proposal.id, kind: proposal.kind, from: a.id, expires: proposal.expires });
+    this.emit(a, { type: "proposal_sent", id: proposal.id, kind: proposal.kind, to: b.id, expires: proposal.expires });
+  }
+
+  // `to` names the person who asked. (Each person has at most one proposal out, so it is unambiguous.)
+  respond(a, r) {
+    const fail = (reason) => this.emit(a, { type: "speech_failed", speech: "respond", reason });
+    if (!r || typeof r !== "object" || !Number.isInteger(r.to) || typeof r.accept !== "boolean") return fail("bad_speech");
+    // (a proposal made this very tick can't be answered yet: its recipient hasn't heard it)
+    const p = this.proposals.find((q) => q.from === r.to && q.to === a.id && q.createdTick < this.tick);
+    if (!p) return fail("no_such_proposal");
+    const asker = this.byId(p.from);
+    if (dist2(a, asker) > C.TALK_RANGE * C.TALK_RANGE) return fail("out_of_range"); // stays pending until it expires
+    if (!r.accept) {
+      this.declineUntil.set(p.from + ":" + p.to, this.tick + C.DECLINE_COOLDOWN);
+      return this.closeProposal(p, "declined");
+    }
+    const result = this.proposalKinds.get(p.kind).accept(this, asker, a);
+    this.closeProposal(p, result.ok ? "accepted" : "invalid", result.ok ? undefined : result.reason);
   }
 
   stepFires() {
@@ -323,7 +408,9 @@ export class Sim {
 
   step() {
     const humans = this.entities.filter((e) => e.kind === "human");
-    for (const a of humans) this.stepActor(a); // id order
+    this.expireProposals();
+    for (const a of humans) if (!a.removed) this.stepActor(a); // id order
+    this.resolveSpeech();
     this.stepFires();
     this.stepDeer(humans.filter((h) => !h.removed));
     this.dropSticks();
