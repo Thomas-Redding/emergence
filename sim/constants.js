@@ -77,3 +77,10 @@ export const DEER_BIRTH_COST = 250; // energy the parent spends
 export const DEER_FAWN_ENERGY = 500;
 export const DEER_MATE_RADIUS = 20; // an adult deer must have another adult within this many tiles to breed
 export const DEER_MAX = 300; // safety cap so a runaway can't stall the sim
+
+export const TICKS_PER_SECOND = 20; // the browser's rate at speed x1: how ticks map to game time
+
+// ---- Human life cycle (ticks; 20 per second at speed x1, so 1,000 ticks = 50 seconds) ----
+export const HUMAN_ADULT_TICKS = 4000; // a person is a child until this age (children matter once there are births)
+export const HUMAN_LIFESPAN_MIN = 60000; // old-age death is rolled per person in [MIN, MIN + SPREAD): 50-75 min at x1
+export const HUMAN_LIFESPAN_SPREAD = 30000;

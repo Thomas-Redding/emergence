@@ -49,6 +49,7 @@ The HUD along the bottom shows a food bar, an inventory hotbar (sprite icons, st
 - **Crafting:** sharpening takes 200 ticks, lighting a fire 30, a lit fire burns 800, and cooking takes 60. Progress is stored on the item or fire in the world (never on the actor), so putting a stick down and picking it up again loses nothing.
 - **Vision is limited.** A human sees a 140° cone in front of them out to 10 tiles, and trees block line of sight. Anything within 1.5 tiles is always noticed. Deer see 300°, so their only blind spot is straight behind them.
 - **The deer have a life cycle, and a food supply.** Every non-tree tile holds grass (plains up to 20 units, forest up to 10) that regrows slowly and is eaten down by grazing. A deer has energy that drains steadily; below a threshold it walks to the nearest decent patch and grazes until full, and it starves at zero. Fawns take 1,500 ticks to become adults, and adults die of old age at a randomly rolled 20,000–30,000 ticks. A well-fed adult with another adult nearby can breed (with a cooldown and an energy cost), and the fawn starts small. There is no population cap and no respawn timer: **the herd is limited only by the grass**, so the herd finds its own size (the world starts with 73 deer on ground that is only 20% grassed; the herd swells modestly, then settles around 120 on the default 96x96 map whichever seed you use) and can boom and bust. Humans hunting them is the only predation.
+- **People age.** Everyone has an age, and dies of old age at a per-person lifespan rolled from the seed (60,000-90,000 ticks: 50 to 75 minutes at speed x1); starving is the other way to die, and the world records which. Until 4,000 ticks old a person is a child (visible to others as `adult: false`; children only matter once there are births). Nobody, themselves included, knows their own lifespan, only the range. Whoever dies drops what they carried where they fell.
 - **Hunting.** A deer hears normal footsteps from 6 tiles away in any direction (30% chance per tick to notice). A *sneaking* human is only noticed if a deer can actually see them, within 2 tiles (3% per tick). So: approach from behind, sneaking. To stab you must hold a spear, be within 1.2 tiles, and face the deer.
 
 ## How it is built
@@ -111,12 +112,13 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 ```
 { tick,
   reach: { pickup, stab, fire, stabFacingCos },          // how close/aligned you must be
-  self:  { id, x, y, facing: [fx, fy], food, foodMax,
+  rules: { mealFood, foodPerTick, adultAge, lifespan: [lo, hi] },   // what food and age are worth
+  self:  { id, x, y, facing: [fx, fy], age, food, foodMax,
            inventory: [{ id, kind, ...progress }] },
   view:  { radius, x0, y0,                                // window of tiles around you
            tiles: ["..,T?", ...],                         // '.' plains ',' forest 'T' tree
            grass: ["98-30", ...],                         // '0'..'9' grass now, '-' none; '?' = not visible right now
-           entities: [{ id, kind, x, y, ... }] },         // deer also carry adult: true/false
+           entities: [{ id, kind, x, y, ... }] },         // deer and humans also carry adult: true/false
   lastResult: { ok, reason?, action } }
 ```
 
@@ -167,7 +169,7 @@ node tools/bench.mjs --baseline tools/baselines/mine.json               # ...and
 node tools/bench.mjs --help
 ```
 
-It runs each brain headless over many seeds and reports how many NPCs survive, how long they live, meals and kills per 1000 ticks alive, the deer herd (mean, lowest, whether it died out), grass left, and speed. Every run is deterministic, so the same command gives the same numbers (apart from the speed line). Brains are named (`basic`, `idle`) or a file (`path/to/brain.js`, using its default or `brain` export, or `path/to/brain.js:exportName`).
+It runs each brain headless over many seeds and reports how many NPCs starve (dying of old age is reported separately: it isn't a brain failing), how long they live, meals and kills per 1000 ticks alive, the deer herd (mean, lowest, whether it died out), grass left, and speed. Every run is deterministic, so the same command gives the same numbers (apart from the speed line). Brains are named (`basic`, `idle`) or a file (`path/to/brain.js`, using its default or `brain` export, or `path/to/brain.js:exportName`).
 
 Comparisons are **paired by seed**: brain B and brain A play the same worlds, so the difference is far less noisy than comparing two averages. Differences are shown with their standard error and a z score (`*` means |z| >= 2, `**` means |z| >= 3). `idle` (a brain that does nothing) is a handy floor: it starves at tick 2,000. `basic` is the original NPC and `forager` is a more careful one (see below). `tools/baselines/` holds saved references (valid only for the current sim rules; re-save after changing them). The library behind it is `tools/harness.mjs` (import `runScenario`, `summarize`, `pairedDiff`, ...) if you want to script your own experiments.
 

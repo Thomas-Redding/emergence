@@ -168,7 +168,7 @@ test("the command line works end to end", () => {
 
   r = run("--sweep-npcs", "1,2", "--seeds", "2", "--ticks", "1200");
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /alive at end/);
+  assert.match(r.stdout, /no starving/);
   assert.equal(r.stdout.trim().split("\n").filter((l) => /^[12]\s+\d+%/.test(l)).length, 2, "one row per NPC count");
   r = run("--sweep-npcs", "1,2", "--save", "x.json");
   assert.equal(r.status, 1);

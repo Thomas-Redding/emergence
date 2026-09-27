@@ -4,11 +4,11 @@ import { makeInput, inputBrain, scriptedBrain } from "./sim/brains.js";
 import { TileMemory } from "./sim/memory.js";
 import { forager } from "./npcs/forager.js";
 import { draw, zoomAt, screenToWorld, interpPos, panCamera } from "./render/render.js";
+import { TICKS_PER_SECOND as TICKS_PER_SEC } from "./sim/constants.js";
 import { buildHud } from "./ui/inventory.js";
 import { actionPlans, ACTION_KEYS, FAIL_TEXT } from "./ui/controls.js";
 import { hudHtml, renderHud } from "./ui/hud.js";
 
-const TICKS_PER_SEC = 20;
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get("seed") ?? 1);
 // Observer mode: no human player at all, a god's-eye view of the NPCs. Chosen at start because
@@ -31,6 +31,7 @@ let memory = new TileMemory();
 const remember = (obs) => memory.update(obs);
 let sim = makeSim(inputBrain(input, remember));
 let playerId = sim.humanIds[0] ?? null;
+let playerRef = sim.byId(playerId) ?? null; // the object outlives the character: it keeps how they died
 let selectedId = null; // observer/reveal: the creature the camera follows and the info line describes
 let replayLog = null; // non-null while replaying
 let replayTarget = null; // replayTarget = { tick, hash } captured from the live game
@@ -104,6 +105,7 @@ document.getElementById("replay").onclick = () => {
   replayLog = sim.inputLog.slice();
   memory = new TileMemory(); // the replay rebuilds it from the same observations
   sim = makeSim(scriptedBrain(replayLog, remember)); // the recorded actor is now driven by the log
+  playerRef = sim.byId(playerId) ?? null;
   status.textContent = `replaying ${replayLog.length} inputs to tick ${replayTarget.tick}...`;
 };
 
@@ -161,7 +163,10 @@ function updateHud() {
   const targetId = sel && sel.kind === "human" ? sel.id : playerId;
   if (sel && sel.kind !== "human") return renderHud(hud, ""); // a deer has no inventory
   const obs = targetId == null ? null : sim.observe(targetId);
-  if (!obs) return renderHud(hud, playerId != null && targetId === playerId ? '<div class="card dead">You starved.</div>' : "");
+  if (!obs) {
+    const how = playerRef?.cause === "old_age" ? "You died of old age." : "You starved.";
+    return renderHud(hud, playerId != null && targetId === playerId ? `<div class="card dead">${how}</div>` : "");
+  }
   const isPlayer = targetId === playerId;
   const model = buildHud(obs, { isPlayer });
   const showHint = isPlayer && hint && sim.tick - hint.tick < 60 ? hint.msg : null;

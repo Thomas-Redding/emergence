@@ -96,7 +96,8 @@ export function runOne(config, seed) {
   const npcRuns = actors.map(({ brain, actor }) => ({
     id: actor.id, brain,
     alive: !actor.removed,
-    lifetime: actor.diedAt ?? ticks, // ticks lived, capped at the run length
+    cause: actor.cause ?? null, // "starvation" | "old_age" | null (still alive)
+    lifetime: actor.diedAt ?? ticks, // ticks lived (whatever the cause), capped at the run length
     diedAt: actor.diedAt ?? null,
     meals: actor.tally.meals, kills: actor.tally.kills, fires: actor.tally.fires,
   }));
@@ -115,6 +116,8 @@ export function runScenario(config) {
 }
 
 // ---------- metrics ----------
+// Starving is a brain failing; dying of old age is not. (Hand-made or older data with no cause: not alive = starved.)
+const starved = (n) => (n.cause ? n.cause === "starvation" : !n.alive);
 const rate = (num, den) => (den > 0 ? (1000 * num) / den : null);
 const perBrainFilter = (npcs, brain) => (brain ? npcs.filter((n) => n.brain === brain) : npcs);
 
@@ -124,8 +127,10 @@ export function scalars(run, brain = null) {
   const aliveTicks = npcs.reduce((a, n) => a + n.lifetime, 0);
   const samples = run.herd.samples;
   return {
-    survival: npcs.length ? npcs.filter((n) => n.alive).length / npcs.length : null,
-    lifetime: npcs.length ? aliveTicks / npcs.length / run.ticks : null, // fraction of the run lived, on average
+    survival: npcs.length ? npcs.filter((n) => !starved(n)).length / npcs.length : null, // did not starve
+    oldAge: npcs.length ? npcs.filter((n) => n.cause === "old_age").length / npcs.length : null,
+    // fraction of the run lived, on average: a starved NPC lived only until it starved; anyone else lived it all
+    lifetime: npcs.length ? npcs.reduce((a, n) => a + (starved(n) ? n.lifetime / run.ticks : 1), 0) / npcs.length : null,
     mealsPer1000: rate(npcs.reduce((a, n) => a + n.meals, 0), aliveTicks),
     killsPer1000: rate(npcs.reduce((a, n) => a + n.kills, 0), aliveTicks),
     herdMean: samples.length ? mean(samples) : null,
@@ -137,7 +142,8 @@ export function scalars(run, brain = null) {
 }
 
 export const METRICS = [
-  { key: "survival", label: "NPCs alive at end", kind: "pct", better: "higher" },
+  { key: "survival", label: "NPCs that didn't starve", kind: "pct", better: "higher" },
+  { key: "oldAge", label: "died of old age", kind: "pct" },
   { key: "lifetime", label: "share of run lived", kind: "pct", better: "higher" },
   { key: "mealsPer1000", label: "meals / 1000 ticks alive", kind: "num", better: "higher" },
   { key: "killsPer1000", label: "kills / 1000 ticks alive", kind: "num", better: "higher" },
@@ -239,9 +245,9 @@ export function formatSummary(result, { brain = null, baseline = null } = {}) {
 
 // Which seeds went worst, to look at next: any NPC deaths or a herd extinction.
 export function worstSeeds(result, limit = 5) {
-  const rows = result.runs.map((r) => ({ seed: r.seed, deaths: r.npcs.filter((n) => !n.alive).length, extinct: scalars(r).herdExtinct === 1 }));
+  const rows = result.runs.map((r) => ({ seed: r.seed, deaths: r.npcs.filter(starved).length, extinct: scalars(r).herdExtinct === 1 }));
   return rows.filter((r) => r.deaths || r.extinct).sort((a, b) => b.deaths - a.deaths).slice(0, limit)
-    .map((r) => `seed ${r.seed}: ${r.deaths} NPC death(s)${r.extinct ? ", deer died out" : ""}`);
+    .map((r) => `seed ${r.seed}: ${r.deaths} NPC starvation(s)${r.extinct ? ", deer died out" : ""}`);
 }
 
 // Several brains, each run alone on the same seeds: side-by-side means and a paired diff against the first.
@@ -269,7 +275,7 @@ export function formatComparison(results) {
 // results: [{ label, result }]
 export function formatSweep(rows, labelName = "NPCs") {
   const cols = [
-    ["survival", "alive at end", "pct"], ["lifetime", "run lived", "pct"], ["mealsPer1000", "meals/1000", "num"],
+    ["survival", "no starving", "pct"], ["lifetime", "run lived", "pct"], ["mealsPer1000", "meals/1000", "num"],
     ["killsPer1000", "kills/1000", "num"], ["herdMean", "deer mean", "int"], ["herdMin", "deer low", "int"],
     ["herdExtinct", "deer died out", "pct"], ["msPer1000", "ms/1000", "int"],
   ];

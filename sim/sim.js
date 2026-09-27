@@ -10,9 +10,13 @@ const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 export class Sim {
   // startingDeer: how many deer at tick 0 (default scales with map area); startingGrass: the fraction of
   // each tile's grass capacity present at tick 0. Both only shape the opening: the herd then finds its own size.
-  constructor({ seed, width = 96, height = 96, startingDeer = null, startingGrass = C.GRASS_START_FRACTION }) {
+  // humanLifespanMin/Spread: the range old-age death is rolled from (overridable, e.g. tiny in tests).
+  constructor({ seed, width = 96, height = 96, startingDeer = null, startingGrass = C.GRASS_START_FRACTION,
+                humanLifespanMin = C.HUMAN_LIFESPAN_MIN, humanLifespanSpread = C.HUMAN_LIFESPAN_SPREAD }) {
     this.seed = seed;
     this.tick = 0;
+    this.humanLifespanMin = humanLifespanMin;
+    this.humanLifespanSpread = humanLifespanSpread;
     this.world = generateWorld(seed, width, height);
     this.rng = makeRng(deriveSeed(seed, "sim"));
     this.entities = []; // ascending id order; removal is deferred to end of step
@@ -22,7 +26,7 @@ export class Sim {
     this.humanIds = []; // actors added with { record: true }: the ones a person (or a replay) drives
     this.inputLog = []; // [{ tick, actor, action }] of every non-wait action by a recorded brain:
     //                     with the seed and the setup, everything needed to replay a session
-    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
+    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deathsStarved: 0, deathsOld: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
     this.grass = Uint8Array.from(this.world.grassCap, (c) => Math.round(c * startingGrass));
     const herd = startingDeer ?? Math.floor((width * height * C.DEER_START_PER_1000_TILES) / 1000);
     for (let i = 0; i < herd; i++) this.spawnDeerRandom();
@@ -97,11 +101,16 @@ export class Sim {
   // starts at the centre of the nearest free tile.
   // opts.record: log this brain's actions to inputLog (use it for human-driven actors, so a
   // session can be replayed by feeding the log back through scriptedBrain).
-  addActor(brainFn, x, y, { record = false } = {}) {
+  // age: how old they are at the start (default: a fresh adult). lifespan: overrides the rolled old-age
+  // death (a test hook); normally it is rolled from a per-person stream so that adding people never
+  // perturbs the random draws that drive the world and the deer.
+  addActor(brainFn, x, y, { record = false, age = C.HUMAN_ADULT_TICKS, lifespan = null } = {}) {
     [x, y] = this.findFreeNear(x, y);
     // tally: what this actor has achieved (for benchmarking brains against each other). It only counts
     // things that already happened in the world, so it isn't part of the state hash.
     const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 } });
+    a.born = this.tick - age; // age is this.tick - born
+    a.lifespan = lifespan ?? this.humanLifespanMin + makeRng(deriveSeed(this.seed, "life" + a.id)).int(this.humanLifespanSpread);
     this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record });
     if (record) this.humanIds.push(a.id);
     return a;
@@ -149,12 +158,19 @@ export class Sim {
   stepActor(a) {
     a.noisy = false;
     a.lastResult = applyAction(this, a, this.think(a));
-    if (this.tick % C.FOOD_DECAY_EVERY === 0 && --a.food <= 0) {
-      a.removed = true;
-      a.diedAt = this.tick;
-      this.stats.deaths++;
-      for (const e of this.entities) if (e.holder === a.id) { e.holder = null; e.x = a.x; e.y = a.y; }
-    }
+    if (this.tick % C.FOOD_DECAY_EVERY === 0 && --a.food <= 0) this.killPerson(a, "starvation");
+    else if (this.tick - a.born >= a.lifespan) this.killPerson(a, "old_age");
+  }
+
+  // A person dies: they leave the world, and what they carried drops where they fell.
+  killPerson(a, cause) {
+    a.removed = true;
+    a.diedAt = this.tick;
+    a.cause = cause; // "starvation" | "old_age" (also stays on the object, for whoever holds a reference)
+    this.stats.deaths++;
+    if (cause === "starvation") this.stats.deathsStarved++;
+    else this.stats.deathsOld++;
+    for (const e of this.entities) if (e.holder === a.id) { e.holder = null; e.x = a.x; e.y = a.y; }
   }
 
   stepFires() {

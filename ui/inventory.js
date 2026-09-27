@@ -1,6 +1,6 @@
 // The HUD as data: what to show for a character, computed from its observation. Pure logic (no
 // DOM), so it is unit-tested; ui/hud.js turns it into HTML.
-import { SHARPEN_TICKS, FIRE_BUILD_TICKS, FIRE_FUEL, COOK_TICKS, MEAT_FOOD } from "../sim/constants.js";
+import { SHARPEN_TICKS, FIRE_BUILD_TICKS, FIRE_FUEL, COOK_TICKS, MEAT_FOOD, TICKS_PER_SECOND } from "../sim/constants.js";
 import { actionPlans, ACTION_KEYS, NAMES } from "./controls.js";
 
 const pct = (f) => `${Math.round(f * 100)}%`;
@@ -38,6 +38,12 @@ function foodOf(self) {
   return { value: Math.round(self.food), max: self.foodMax, frac, level: frac < 0.15 ? "critical" : frac < 0.4 ? "low" : "ok" };
 }
 
+// Age as game time (mm:ss at speed x1), and whether they are still a child.
+function ageOf(obs) {
+  const ticks = obs.self.age ?? 0, secs = Math.floor(ticks / TICKS_PER_SECOND);
+  return { ticks, adult: ticks >= (obs.rules?.adultAge ?? 0), text: `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}` };
+}
+
 // The nearest fire within reach, if any.
 function fireOf(obs) {
   const me = obs.self;
@@ -55,7 +61,7 @@ function fireOf(obs) {
 
 // isPlayer: also show which actions are available (for a selected NPC we only show its inventory).
 export function buildHud(obs, { isPlayer }) {
-  const model = { food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [] };
+  const model = { age: ageOf(obs), food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [] };
   if (isPlayer) {
     const plans = actionPlans(obs);
     model.actions = ACTION_KEYS.map((k) => ({ key: k.toUpperCase(), label: plans[k].label, hold: plans[k].hold, enabled: !!plans[k].action, why: plans[k].why ?? null }));

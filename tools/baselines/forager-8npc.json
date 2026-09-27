@@ -27,6 +27,7 @@
    "seed": 1,
    "metrics": {
     "survival": 0.75,
+    "oldAge": 0,
     "lifetime": 0.9749666666666666,
     "mealsPer1000": 0.9658449861533728,
     "killsPer1000": 0.9658449861533728,
@@ -34,13 +35,14 @@
     "herdMin": 72,
     "herdExtinct": 0,
     "grassPct": 30.594392237756896,
-    "msPer1000": 294.88295
+    "msPer1000": 292.47846386666663
    }
   },
   {
    "seed": 2,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.9583166666666667,
     "mealsPer1000": 0.9739299813909807,
     "killsPer1000": 0.9739299813909807,
@@ -48,13 +50,14 @@
     "herdMin": 54,
     "herdExtinct": 0,
     "grassPct": 52.38815374921235,
-    "msPer1000": 391.0536444666667
+    "msPer1000": 377.53038333333336
    }
   },
   {
    "seed": 3,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.9749833333333333,
     "mealsPer1000": 0.9829227850048718,
     "killsPer1000": 0.9829227850048718,
@@ -62,13 +65,14 @@
     "herdMin": 70,
     "herdExtinct": 0,
     "grassPct": 33.06614662103001,
-    "msPer1000": 412.51927226666663
+    "msPer1000": 401.08416393333334
    }
   },
   {
    "seed": 4,
    "metrics": {
     "survival": 1,
+    "oldAge": 0,
     "lifetime": 1,
     "mealsPer1000": 1,
     "killsPer1000": 1,
@@ -76,13 +80,14 @@
     "herdMin": 92,
     "herdExtinct": 0,
     "grassPct": 11.624183425131292,
-    "msPer1000": 443.2763250000001
+    "msPer1000": 436.05505559999995
    }
   },
   {
    "seed": 5,
    "metrics": {
     "survival": 1,
+    "oldAge": 0,
     "lifetime": 1,
     "mealsPer1000": 1,
     "killsPer1000": 1,
@@ -90,13 +95,14 @@
     "herdMin": 70,
     "herdExtinct": 0,
     "grassPct": 25.641467788660506,
-    "msPer1000": 442.8887083333333
+    "msPer1000": 460.86035
    }
   },
   {
    "seed": 6,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.89165,
     "mealsPer1000": 0.9813267537710986,
     "killsPer1000": 0.9813267537710986,
@@ -104,13 +110,14 @@
     "herdMin": 91,
     "herdExtinct": 0,
     "grassPct": 19.943650066915545,
-    "msPer1000": 396.51922500000023
+    "msPer1000": 413.21548053333345
    }
   },
   {
    "seed": 7,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.96665,
     "mealsPer1000": 0.9827755650959499,
     "killsPer1000": 0.9827755650959499,
@@ -118,13 +125,14 @@
     "herdMin": 62,
     "herdExtinct": 0,
     "grassPct": 37.80531404891525,
-    "msPer1000": 393.19841113333337
+    "msPer1000": 396.26164166666666
    }
   },
   {
    "seed": 8,
    "metrics": {
     "survival": 1,
+    "oldAge": 0,
     "lifetime": 1,
     "mealsPer1000": 1,
     "killsPer1000": 1,
@@ -132,13 +140,14 @@
     "herdMin": 51,
     "herdExtinct": 0,
     "grassPct": 40.64998899567163,
-    "msPer1000": 423.7622555333335
+    "msPer1000": 427.7137639333334
    }
   },
   {
    "seed": 9,
    "metrics": {
     "survival": 1,
+    "oldAge": 0,
     "lifetime": 1,
     "mealsPer1000": 1,
     "killsPer1000": 1,
@@ -146,13 +155,14 @@
     "herdMin": 86,
     "herdExtinct": 0,
     "grassPct": 13.462672871468834,
-    "msPer1000": 450.74800560000006
+    "msPer1000": 459.6015999999998
    }
   },
   {
    "seed": 10,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.89165,
     "mealsPer1000": 0.9813267537710986,
     "killsPer1000": 0.9813267537710986,
@@ -160,13 +170,14 @@
     "herdMin": 62,
     "herdExtinct": 0,
     "grassPct": 34.207620528771386,
-    "msPer1000": 380.72540000000004
+    "msPer1000": 415.59841113333334
    }
   },
   {
    "seed": 11,
    "metrics": {
     "survival": 0.875,
+    "oldAge": 0,
     "lifetime": 0.89165,
     "mealsPer1000": 0.9813267537710986,
     "killsPer1000": 0.9813267537710986,
@@ -174,21 +185,22 @@
     "herdMin": 65,
     "herdExtinct": 0,
     "grassPct": 28.16251087271673,
-    "msPer1000": 388.99574166666616
+    "msPer1000": 419.82051946666616
    }
   },
   {
    "seed": 12,
    "metrics": {
     "survival": 0.875,
-    "lifetime": 0.9249833333333334,
+    "oldAge": 0,
+    "lifetime": 0.9249833333333333,
     "mealsPer1000": 0.9819996756698319,
     "killsPer1000": 0.9910088470062524,
     "herdMean": 110.63333333333334,
     "herdMin": 89,
     "herdExtinct": 0,
     "grassPct": 17.22915345034186,
-    "msPer1000": 392.032438866667
+    "msPer1000": 405.01575833333385
    }
   }
  ]
