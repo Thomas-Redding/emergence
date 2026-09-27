@@ -99,7 +99,9 @@ export class Sim {
   // session can be replayed by feeding the log back through scriptedBrain).
   addActor(brainFn, x, y, { record = false } = {}) {
     [x, y] = this.findFreeNear(x, y);
-    const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true } });
+    // tally: what this actor has achieved (for benchmarking brains against each other). It only counts
+    // things that already happened in the world, so it isn't part of the state hash.
+    const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 } });
     this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record });
     if (record) this.humanIds.push(a.id);
     return a;
@@ -149,6 +151,7 @@ export class Sim {
     a.lastResult = applyAction(this, a, this.think(a));
     if (this.tick % C.FOOD_DECAY_EVERY === 0 && --a.food <= 0) {
       a.removed = true;
+      a.diedAt = this.tick;
       this.stats.deaths++;
       for (const e of this.entities) if (e.holder === a.id) { e.holder = null; e.x = a.x; e.y = a.y; }
     }

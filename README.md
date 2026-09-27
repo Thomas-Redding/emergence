@@ -69,7 +69,7 @@ render/    Canvas rendering: render.js, sprites.js (pixel art drawn in code), an
 main.js    browser client: input, camera, replay button
 ui/        the HUD: controls.js (what is possible now), inventory.js (HUD as data), hud.js (HTML)
 server.py  a minimal static file server
-tools/     ecosystem.mjs: a headless population harness (see below)
+tools/     bench.mjs + harness.mjs: benchmark brains over many seeds; ecosystem.mjs: deer/grass population runs
 tests/     determinism, NPC, vision, replay, memory, animation, HUD, ecosystem
 ```
 
@@ -154,6 +154,22 @@ node tools/ecosystem.mjs [seeds=6] [ticks=100000] [npcs=0]
 ```
 
 runs the world headless for a long time and prints the deer population over time, the herd's min and max, how much grass is left, and births, starvations, old-age deaths and kills per seed. Use it to check a change to the deer or grass constants (`sim/constants.js`) hasn't led to extinction or a runaway herd. Add NPCs to see how much hunting matters.
+
+### Benchmarking brains
+
+```bash
+node tools/bench.mjs                                    # the baseline NPC: 3 NPCs, 20 seeds, 10,000 ticks
+node tools/bench.mjs --sweep-npcs 1,3,6,10 --seeds 8    # how does it cope as the population grows?
+node tools/bench.mjs --brain basic,./mybrain.js         # two brains alone on the same seeds, compared pairwise
+node tools/bench.mjs --brain basic,./mybrain.js --mode mixed --npcs 6   # or competing in one world
+node tools/bench.mjs --save tools/baselines/mine.json   # save a reference...
+node tools/bench.mjs --baseline tools/baselines/mine.json               # ...and compare after a change
+node tools/bench.mjs --help
+```
+
+It runs each brain headless over many seeds and reports how many NPCs survive, how long they live, meals and kills per 1000 ticks alive, the deer herd (mean, lowest, whether it died out), grass left, and speed. Every run is deterministic, so the same command gives the same numbers (apart from the speed line). Brains are named (`basic`, `idle`) or a file (`path/to/brain.js`, using its default or `brain` export, or `path/to/brain.js:exportName`).
+
+Comparisons are **paired by seed**: brain B and brain A play the same worlds, so the difference is far less noisy than comparing two averages. Differences are shown with their standard error and a z score (`*` means |z| >= 2, `**` means |z| >= 3). `idle` (a brain that does nothing) is a handy floor: it starves at tick 2,000. `tools/baselines/basic-3npc.json` is a saved reference for the baseline NPC. The library behind it is `tools/harness.mjs` (import `runScenario`, `summarize`, `pairedDiff`, ...) if you want to script your own experiments.
 
 ## Not built yet
 

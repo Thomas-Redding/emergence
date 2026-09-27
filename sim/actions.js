@@ -88,6 +88,7 @@ const HANDLERS = {
     d.removed = true;
     sim.spawn("raw_meat", d.x, d.y, { cook: 0 });
     sim.stats.kills++;
+    a.tally.kills++;
     return ok();
   },
 
@@ -108,6 +109,7 @@ const HANDLERS = {
       f.lit = true;
       f.fuel = C.FIRE_FUEL;
       sim.stats.fires++;
+      a.tally.fires++;
     }
     return ok();
   },
@@ -128,6 +130,7 @@ const HANDLERS = {
     m.removed = true;
     a.food = Math.min(C.FOOD_MAX, a.food + C.MEAT_FOOD);
     sim.stats.meals++;
+    a.tally.meals++;
     return ok();
   },
 };
