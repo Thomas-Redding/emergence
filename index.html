@@ -3,6 +3,11 @@
 <title>Emergence</title>
 <style>body{margin:0;background:#111;color:#ddd;font:14px sans-serif}canvas{display:block;position:fixed;inset:0;z-index:0}#hud{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;line-height:1.3;max-width:96vw}#hud:empty{display:none}
 #hud .hint{background:#3a2a10ee;color:#ffcb7a;border:1px solid #a8752a;padding:3px 10px;border-radius:4px}
+#hud .prompt{background:#12304aee;color:#bfe0ff;border:1px solid #3a7ab0;padding:4px 10px;border-radius:4px}
+#hud .prompt kbd{display:inline-block;min-width:16px;text-align:center;background:#eee;color:#111;border-radius:3px;padding:0 3px;font:bold 12px monospace}
+#hud .left{opacity:.7;font-size:11px}
+#hud .card.dead .take-over{margin-top:6px;font-weight:normal;font-size:13px}
+#hud .card.dead .take-over kbd{display:inline-block;min-width:16px;text-align:center;background:#eee;color:#111;border-radius:3px;padding:0 3px;font:bold 12px monospace}
 #hud .actions{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
 #hud .act{background:#000b;border:1px solid #555;border-radius:4px;padding:2px 7px 2px 3px;color:#fff;white-space:nowrap}
 #hud .act kbd{display:inline-block;min-width:16px;text-align:center;background:#eee;color:#111;border-radius:3px;padding:0 3px;margin-right:5px;font:bold 12px monospace}
@@ -27,7 +32,7 @@
 #hud .pbar{position:absolute;left:4px;right:4px;bottom:14px;height:4px;background:#000;border-radius:2px;overflow:hidden}#hud .pbar div{height:100%;background:#c9a26a}#hud .pbar.raw_meat div{background:#d04a4a}
 #ui{position:relative;z-index:1;padding:4px 6px;background:#000a;display:inline-block}</style>
 <div id="ui"><button id="speed">Speed x1</button> <button id="replay">Replay</button> <button id="mode"></button> <button id="follow">Follow: on</button> <span id="info"></span> <span id="status"></span>
-<div>WASD/arrows move (Shift sneaks; with no character they pan the camera, Shift = faster) · IJKL look · wheel/+/- zoom · drag pans · F follow · V reveal all (then click a creature) · the row of keys at the bottom shows what you can do right now</div></div>
+<div>WASD/arrows move (Shift sneaks; with no character they pan the camera, Shift = faster) · IJKL look · wheel/+/- zoom · drag pans · F follow · V reveal all (then click a creature) · the row of keys at the bottom shows what you can do right now · Y/N answer a proposal · P take over a child, once you've died</div></div>
 <div id="hud"></div>
 <canvas id="c"></canvas>
 <script type="module" src="main.js"></script>

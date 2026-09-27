@@ -186,6 +186,18 @@ export class Sim {
     b.dead = false;
   }
 
+  // Hand an existing actor to a live (or replayed) human-driven brain, recorded like any founder: for
+  // succession, e.g. taking over a surviving child after the player's own character has died. Once claimed
+  // this way, the actor can no longer hand its brain down to a child of its own (see addActor/mate): the
+  // brain here is the input mailbox, not something a future child could inherit.
+  claimAsPlayer(actorId, brainFn) {
+    this.setBrain(actorId, brainFn);
+    const b = this.brains.get(actorId);
+    b.record = true;
+    b.inheritable = false;
+    if (!this.humanIds.includes(actorId)) this.humanIds.push(actorId);
+  }
+
   // What the actor's brain would be given right now. The UI uses this too, so a player's screen
   // shows exactly what their character can perceive and no more.
   observe(actorId) {

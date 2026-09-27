@@ -4,7 +4,7 @@
 import { facingTarget } from "../sim/actions.js";
 
 const PICKUPS = new Set(["stick", "spear", "raw_meat", "cooked_meat"]);
-export const NAMES = { stick: "stick", spear: "spear", raw_meat: "raw meat", cooked_meat: "cooked meat", deer: "deer", fire: "fire" };
+export const NAMES = { stick: "stick", spear: "spear", raw_meat: "raw meat", cooked_meat: "cooked meat", deer: "deer", fire: "fire", human: "them" };
 
 // Sim-side failure reasons, in words.
 export const FAIL_TEXT = {
@@ -17,9 +17,35 @@ export const FAIL_TEXT = {
   need_raw_meat: "you need raw meat",
   not_edible: "only cooked meat is edible",
   no_such_item: "nothing there to pick up",
+  too_young: "you're too young to do that",
 };
 
-export const ACTION_KEYS = ["e", "q", "x", "r", "t", "c", "g"];
+// Why a `propose` or `respond` failed (obs.events: {type: "speech_failed", reason}).
+export const SPEECH_FAIL_TEXT = {
+  out_of_range: "too far away",
+  not_visible: "you'd need to be facing them",
+  already_pending: "you're already waiting on an answer",
+  cooldown: "they said no recently; give it a while",
+  bad_speech: "that didn't make sense",
+  unknown_kind: "nobody understood that",
+  no_such_person: "there's no one there to ask",
+  no_such_proposal: "there was nothing to answer",
+  one_message_per_tick: "you can only say one thing at a time",
+};
+
+// Why an accepted "mate" proposal didn't produce a child (obs.events: {type: "proposal_result", reason}).
+export const MATE_FAIL_TEXT = {
+  proposer_child: "you're too young",
+  recipient_child: "they're too young",
+  proposer_hungry: "you're too hungry",
+  recipient_hungry: "they're too hungry",
+  proposer_cooldown: "you just had a child",
+  recipient_cooldown: "they just had a child",
+  population_cap: "the world is full",
+  not_implemented: "that doesn't do anything yet",
+};
+
+export const ACTION_KEYS = ["e", "q", "x", "r", "t", "c", "g", "m", "h"];
 
 // { e, q, x, r, t, c, g } -> { label, hold, action } if possible now, or { label, hold, why } if not.
 export function actionPlans(obs) {
@@ -62,5 +88,32 @@ export function actionPlans(obs) {
 
   const cooked = mine("cooked_meat")[0];
   plans.g = cooked ? yes("Eat", { type: "eat", item: cooked.id }) : no("Eat", "you have no cooked meat");
+
+  // Propose (mate). Only the basic, self-evident conditions are checked here (an adult target within
+  // talking range, and not already waiting on an answer): a proposal that clears these can still be
+  // declined, or accepted and then turn out invalid (too young, too hungry, on cooldown, ...) — that's
+  // reported back as an event, not predicted here, since some of it (e.g. a recent "no") isn't visible
+  // to the player at all.
+  const outgoing = obs.proposals.outgoing;
+  const partner = near((e) => e.kind === "human" && e.adult, R.talk);
+  if (outgoing) plans.m = no("Propose", `waiting for an answer (${Math.max(0, outgoing.expires - obs.tick)} ticks left)`);
+  else if (!partner) plans.m = no("Propose", "no adult within talking range");
+  else plans.m = yes(`Propose to ${humanLabel(partner)}`, { type: "wait", propose: { to: partner.id, kind: "mate" } });
+
+  // Give: prefer feeding your own child if one is in reach, otherwise hand something to whoever is
+  // closest. cooked meat goes first (it's what a child needs), then whatever else you're carrying.
+  const myKids = new Set(me.children ?? []);
+  const kid = near((e) => e.kind === "human" && myKids.has(e.id), R.give);
+  const anyone = near((e) => e.kind === "human", R.give);
+  const target = kid ?? anyone;
+  if (!me.inventory.length) plans.h = no("Give", "you have nothing to give", false);
+  else if (!target) plans.h = no("Give", "no one within reach");
+  else {
+    const item = me.inventory.find((i) => i.kind === "cooked_meat") ?? me.inventory[0];
+    plans.h = yes(`Give ${NAMES[item.kind]} to ${kid ? "your child" : humanLabel(target)}`, { type: "give", item: item.id, to: target.id });
+  }
+
   return plans;
 }
+
+const humanLabel = (e) => `human#${e.id}`;

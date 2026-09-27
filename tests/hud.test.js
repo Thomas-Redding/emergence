@@ -5,11 +5,13 @@ import { makeInput, inputBrain } from "../sim/brains.js";
 import { actionPlans, ACTION_KEYS } from "../ui/controls.js";
 import { buildHud } from "../ui/inventory.js";
 
-const REACH = { pickup: 1, stab: 1.2, fire: 1.5, stabFacingCos: 0.5 };
-const mock = (inv, { ents = [], food = 800, facing = [0, 1] } = {}) => ({
+const REACH = { pickup: 1, stab: 1.2, fire: 1.5, give: 1.5, talk: 4, stabFacingCos: 0.5 };
+const mock = (inv, { ents = [], food = 800, facing = [0, 1], children = [], outgoing = null, tick = 0 } = {}) => ({
+  tick,
   reach: REACH,
-  self: { id: 1, x: 10, y: 10, facing, food, foodMax: 1000, inventory: inv },
+  self: { id: 1, x: 10, y: 10, facing, food, foodMax: 1000, inventory: inv, children },
   view: { entities: ents },
+  proposals: { incoming: [], outgoing },
 });
 const I = (id, kind, extra = {}) => ({ id, kind, x: 10, y: 10, ...extra });
 
@@ -90,13 +92,48 @@ test("action availability, with reasons", () => {
 
 test("the HUD's action row matches the plans", () => {
   const h = buildHud(mock([I(1, "stick", { sharpness: 0 })]), { isPlayer: true });
-  assert.deepEqual(h.actions.map((a) => a.key), ["E", "Q", "X", "R", "T", "C", "G"]);
+  assert.deepEqual(h.actions.map((a) => a.key), ["E", "Q", "X", "R", "T", "C", "G", "M", "H"]);
   const q = h.actions.find((a) => a.key === "Q");
   assert.equal(q.enabled, true);
   assert.equal(q.hold, true);
   const r = h.actions.find((a) => a.key === "R");
   assert.equal(r.enabled, false);
   assert.match(r.why, /two sticks/);
+});
+
+test("propose (mate): needs an adult within talking range, and only one outstanding at a time", () => {
+  const adult = { id: 8, kind: "human", x: 10.5, y: 12, adult: true };
+  const child = { id: 9, kind: "human", x: 10.5, y: 12, adult: false };
+  let p = actionPlans(mock([], {}));
+  assert.match(p.m.why, /talking range/);
+  p = actionPlans(mock([], { ents: [child] }));
+  assert.match(p.m.why, /talking range/, "a child doesn't count as a partner");
+  p = actionPlans(mock([], { ents: [adult] }));
+  assert.deepEqual(p.m.action, { type: "wait", propose: { to: 8, kind: "mate" } });
+  p = actionPlans(mock([], { ents: [adult], outgoing: { to: 8, kind: "mate", expires: 50 }, tick: 10 }));
+  assert.equal(p.m.action, undefined);
+  assert.match(p.m.why, /waiting for an answer \(40 ticks left\)/);
+  const far = { id: 8, kind: "human", x: 20, y: 12, adult: true };
+  assert.match(actionPlans(mock([], { ents: [far] })).m.why, /talking range/);
+});
+
+test("give: your own child in reach comes before a stranger; cooked meat is offered first", () => {
+  const stranger = { id: 8, kind: "human", x: 10.5, y: 10.9, adult: true };
+  const kid = { id: 9, kind: "human", x: 10.5, y: 10.9, adult: false };
+  let p = actionPlans(mock([I(1, "cooked_meat")]));
+  assert.match(p.h.why, /no one/, "carrying something, but nobody nearby");
+  p = actionPlans(mock([], { ents: [stranger] }));
+  assert.match(p.h.why, /nothing to give/);
+  p = actionPlans(mock([I(1, "cooked_meat")], { ents: [stranger] }));
+  assert.deepEqual(p.h.action, { type: "give", item: 1, to: 8 });
+  assert.match(p.h.label, /human#8/);
+  p = actionPlans(mock([I(1, "cooked_meat")], { ents: [stranger, kid], children: [9] }));
+  assert.equal(p.h.action.to, 9, "the child, not the (closer, same-distance) stranger");
+  assert.match(p.h.label, /your child/);
+  p = actionPlans(mock([I(1, "stick"), I(2, "cooked_meat")], { ents: [stranger] }));
+  assert.equal(p.h.action.item, 2, "cooked meat offered first, even if picked up later");
+  p = actionPlans(mock([I(1, "stick")], { ents: [stranger] }));
+  assert.equal(p.h.action.item, 1, "otherwise, whatever you have");
 });
 
 // The important one: whatever the UI says is possible must really succeed in the sim, and

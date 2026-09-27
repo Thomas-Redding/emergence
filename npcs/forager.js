@@ -136,8 +136,14 @@ export function makeForager({ eat = "no-waste", gate = "reserve", reserve = 2, f
     }
   }
 
-  if (!fam) return withMemory(brain);
-  // Answer proposals as they come in (riding along on whatever it is doing), and give its children a childhood.
+  // Whatever brain a child inherits, it gets a childhood: withChildhood takes over completely until
+  // adulthood (eat what it's given, pick up meat, stay near a parent, never try to hunt) and only then
+  // hands off to `brain`. Without this, a child running the plain (non-family) brain could wander into
+  // `brain`'s long uninterruptible routines, most dangerously a 200-tick spear-sharpening loop it could
+  // never even use (children can't stab) that ignores food given to it mid-loop; a child's food starts
+  // low (500) and only drains, so it could starve mid-sharpen with a meal sitting unused in its pack.
+  if (!fam) return withMemory(withChildhood(brain));
+  // Answer proposals as they come in (riding along on whatever it is doing).
   const reply = (obs) => {
     const asked = obs.proposals.incoming.find((p) => p.kind === "mate");
     return asked ? { to: asked.from, accept: wantsChild(obs, fam) } : null;

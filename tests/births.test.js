@@ -265,3 +265,18 @@ test("births are deterministic, part of the hash, and replay exactly", () => {
   assert.equal(hashState(rep), hashState(live));
   assert.equal(rep.stats.births, 1);
 });
+
+test("claimAsPlayer hands an actor to a live brain and marks it as such", () => {
+  const { s, ids, actors } = couple();
+  s.run(3);
+  const kid = children(s)[0];
+  const input = makeInput();
+  s.claimAsPlayer(kid.id, inputBrain(input));
+  assert.equal(s.brains.get(kid.id).record, true);
+  assert.equal(s.brains.get(kid.id).inheritable, false);
+  assert.ok(s.humanIds.includes(kid.id));
+  input.push({ type: "face", dx: 1, dy: 0 });
+  s.step();
+  assert.deepEqual(kid.facing, [1, 0]);
+  assert.ok(s.inputLog.some((e) => e.actor === kid.id && e.action.type === "face"));
+});

@@ -6,7 +6,7 @@ import { forager } from "./npcs/forager.js";
 import { draw, zoomAt, screenToWorld, interpPos, panCamera } from "./render/render.js";
 import { TICKS_PER_SECOND as TICKS_PER_SEC } from "./sim/constants.js";
 import { buildHud } from "./ui/inventory.js";
-import { actionPlans, ACTION_KEYS, FAIL_TEXT } from "./ui/controls.js";
+import { actionPlans, ACTION_KEYS, FAIL_TEXT, SPEECH_FAIL_TEXT, MATE_FAIL_TEXT } from "./ui/controls.js";
 import { hudHtml, renderHud } from "./ui/hud.js";
 
 const params = new URLSearchParams(location.search);
@@ -35,6 +35,17 @@ let playerRef = sim.byId(playerId) ?? null; // the object outlives the character
 let selectedId = null; // observer/reveal: the creature the camera follows and the info line describes
 let replayLog = null; // non-null while replaying
 let replayTarget = null; // replayTarget = { tick, hash } captured from the live game
+let succession = null; // a living child of the dead player, offered as someone to take over (P)
+
+// Take over a surviving child after your own character has died: the same input mailbox now drives
+// them, and their actions are recorded (so a further replay/succession chain still works).
+function takeOver(child) {
+  sim.claimAsPlayer(child.id, inputBrain(input, remember));
+  playerId = child.id;
+  playerRef = child;
+  memory = new TileMemory(); // a fresh view: the world as far as THEY have seen it, not as their parent did
+  succession = null;
+}
 
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
@@ -118,6 +129,7 @@ addEventListener("keydown", (e) => {
   if (k === "+" || k === "=" || k === "-") zoomAt(cam, canvas.width, canvas.height, canvas.width / 2, canvas.height / 2, k === "-" ? 0.8 : 1.25);
   if (k === "f") setFollow(!follow);
   if (k === "v") reveal = !reveal;
+  if (k === "p" && succession) takeOver(succession);
   keys.add(k); if (e.key.startsWith("Arrow")) e.preventDefault(); });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => { keys.clear(); taps.clear(); }); // a key released while unfocused never sends keyup
@@ -130,30 +142,39 @@ function playerAction() {
   // Decide from what the character can perceive (its observation), like any brain would.
   const obs = playerId == null ? null : sim.observe(playerId);
   if (!obs) return null;
-  const me = obs.self;
   const k = (...names) => names.some((n) => keys.has(n) || taps.has(n));
   const sneak = keys.has("shift");
+  let action = null;
   // Movement is continuous: held keys combine into any of 8 directions (the sim normalizes speed).
   const dx = (k("arrowright", "d") ? 1 : 0) - (k("arrowleft", "a") ? 1 : 0);
   const dy = (k("arrowdown", "s") ? 1 : 0) - (k("arrowup", "w") ? 1 : 0);
-  if (dx || dy) return { type: "move", dx, dy, sneak };
-  if (k("i")) return { type: "face", dx: 0, dy: -1 };
-  if (k("k")) return { type: "face", dx: 0, dy: 1 };
-  if (k("j")) return { type: "face", dx: -1, dy: 0 };
-  if (k("l")) return { type: "face", dx: 1, dy: 0 };
-
-  // Only explain a do-nothing key on a fresh press; a held key finishing its job is not an error.
-  const tip = (key, msg) => { if (taps.has(key)) say(msg); };
-  // Everything else is a plan computed from the observation (ui/controls.js), the same one the HUD
-  // shows: the first held key whose action is possible is sent; a fresh press that can't be done
-  // says why. (Only explain a do-nothing key on a fresh press; a held key finishing its job is not an error.)
-  const plans = actionPlans(obs);
-  for (const key of ACTION_KEYS) {
-    if (!k(key)) continue;
-    if (plans[key].action) return plans[key].action;
-    if (taps.has(key)) say(plans[key].why);
+  if (dx || dy) action = { type: "move", dx, dy, sneak };
+  else if (k("i")) action = { type: "face", dx: 0, dy: -1 };
+  else if (k("k")) action = { type: "face", dx: 0, dy: 1 };
+  else if (k("j")) action = { type: "face", dx: -1, dy: 0 };
+  else if (k("l")) action = { type: "face", dx: 1, dy: 0 };
+  else {
+    // Everything else is a plan computed from the observation (ui/controls.js), the same one the HUD
+    // shows: the first held key whose action is possible is sent; a fresh press that can't be done
+    // says why. (Only explain a do-nothing key on a fresh press; a held key finishing its job is not an error.)
+    const plans = actionPlans(obs);
+    for (const key of ACTION_KEYS) {
+      if (!k(key)) continue;
+      if (plans[key].action) { action = plans[key].action; break; }
+      if (taps.has(key)) say(plans[key].why);
+    }
   }
-  return null;
+
+  // Answering an incoming proposal is a side channel (Y/N), so it rides along on whatever you were
+  // already doing (or a wait, if nothing else) rather than needing you to stand still for it. If the
+  // action you're taking already speaks for itself (e.g. you just pressed M to propose to someone
+  // else), leave it alone: only one message goes out per tick.
+  const incoming = obs.proposals.incoming[0];
+  if (incoming && (!action || (action.propose === undefined && action.respond === undefined))) {
+    const accept = taps.has("y") ? true : taps.has("n") ? false : null;
+    if (accept !== null) action = { ...(action ?? { type: "wait" }), respond: { to: incoming.from, accept } };
+  }
+  return action;
 }
 
 // HUD: built from an observation, so it only shows what that character knows.
@@ -164,18 +185,38 @@ function updateHud() {
   if (sel && sel.kind !== "human") return renderHud(hud, ""); // a deer has no inventory
   const obs = targetId == null ? null : sim.observe(targetId);
   if (!obs) {
+    if (!(playerId != null && targetId === playerId)) return renderHud(hud, "");
     const how = playerRef?.cause === "old_age" ? "You died of old age." : "You starved.";
-    return renderHud(hud, playerId != null && targetId === playerId ? `<div class="card dead">${how}</div>` : "");
+    // Succession: any of your children who are still alive can be taken over. Offer the best-fed one
+    // (the best odds of surviving the switch); a dead parent's `children` list is unaffected by their
+    // own death, only theirs.
+    const kids = (playerRef?.children ?? []).map((id) => sim.byId(id)).filter((c) => c && !c.removed);
+    succession = kids.length ? kids.reduce((a, b) => (b.food > a.food ? b : a)) : null;
+    const offer = succession
+      ? `<div class="take-over">You have a living child. Press <kbd>P</kbd> to take over human#${succession.id} (age ${Math.floor((sim.tick - succession.born) / TICKS_PER_SEC)}s).</div>`
+      : "";
+    return renderHud(hud, `<div class="card dead">${how}${offer}</div>`);
   }
+  succession = null;
   const isPlayer = targetId === playerId;
   const model = buildHud(obs, { isPlayer });
   const showHint = isPlayer && hint && sim.tick - hint.tick < 60 ? hint.msg : null;
   renderHud(hud, hudHtml(model, { title: isPlayer ? "You" : "human#" + targetId, hint: showHint }));
 }
-// Turn a failed player action into a hint (called after each live tick).
+// Turn a failed player action, or something that just happened, into a hint (called after each live tick).
 function noteResult() {
   const obs = playerId != null ? sim.observe(playerId) : null;
-  if (obs && !obs.lastResult.ok && obs.lastResult.reason !== "blocked") say(FAIL_TEXT[obs.lastResult.reason] ?? obs.lastResult.reason);
+  if (!obs) return;
+  if (!obs.lastResult.ok && obs.lastResult.reason !== "blocked") say(FAIL_TEXT[obs.lastResult.reason] ?? obs.lastResult.reason);
+  for (const e of obs.events) {
+    if (e.type === "speech_failed") say(SPEECH_FAIL_TEXT[e.reason] ?? e.reason);
+    else if (e.type === "proposal_result" && e.outcome === "declined") say("they said no");
+    else if (e.type === "proposal_result" && e.outcome === "expired") say("the proposal went unanswered and expired");
+    else if (e.type === "proposal_result" && e.outcome === "gone") say("they're gone");
+    else if (e.type === "proposal_result" && e.outcome === "invalid") say("it fell through: " + (MATE_FAIL_TEXT[e.reason] ?? e.reason));
+    else if (e.type === "birth") say("you had a child!");
+    else if (e.type === "gift") say(`human#${e.from} gave you something`);
+  }
 }
 
 // The keyboard only ever drops an action in the player's mailbox at a tick boundary; the

@@ -59,12 +59,20 @@ function fireOf(obs) {
     : { lit: false, frac: best.progress / FIRE_BUILD_TICKS, text: `building ${pct(best.progress / FIRE_BUILD_TICKS)}`, detail: "Hold T to light it" };
 }
 
-// isPlayer: also show which actions are available (for a selected NPC we only show its inventory).
+// A pending proposal, as ticks left rather than an absolute tick (so the HUD doesn't need obs.tick).
+const withTicksLeft = (p, tick) => (p ? { ...p, left: Math.max(0, p.expires - tick) } : null);
+
+// isPlayer: also show which actions are available, and any pending proposal to answer or wait on
+// (for a selected NPC we only show its inventory).
 export function buildHud(obs, { isPlayer }) {
-  const model = { age: ageOf(obs), food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [] };
+  const model = { age: ageOf(obs), food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [], speech: null };
   if (isPlayer) {
     const plans = actionPlans(obs);
     model.actions = ACTION_KEYS.map((k) => ({ key: k.toUpperCase(), label: plans[k].label, hold: plans[k].hold, enabled: !!plans[k].action, why: plans[k].why ?? null }));
+    model.speech = {
+      incoming: withTicksLeft(obs.proposals.incoming[0] ?? null, obs.tick),
+      outgoing: withTicksLeft(obs.proposals.outgoing, obs.tick),
+    };
   }
   return model;
 }

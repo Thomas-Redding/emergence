@@ -72,3 +72,25 @@ test("the forager kills about what it eats, and about what it needs; basic overh
   assert.equal(avg(f, "survival"), 1, "and nobody starves");
   assert.ok(avg(f, "herdMean") > avg(b, "herdMean"), "leaving a bigger herd behind");
 });
+
+// Regression: a child that inherits the PLAIN (non-family) forager used to be able to wander into an
+// uninterruptible 200-tick spear-sharpening loop and starve there with food sitting unused in its pack,
+// because it wasn't given a childhood the way forager-family's children are. Every forager now is.
+test("a child of the plain forager gets a childhood: no sharpening, and it eats what it's given at once", () => {
+  const s = new Sim({ seed: 1 });
+  s.world.treeAt.fill(0);
+  s.entities = [];
+  s.byIdMap.clear();
+  const a = s.addActor(forager, 40, 40), b = s.addActor(forager, 40, 42);
+  a.food = b.food = 1000;
+  s.mate(a, b);
+  const kid = s.entities.find((e) => e.parents);
+  s.run(200); // long enough that, before the fix, it would already be deep into sharpening a stick
+  assert.equal(kid.removed, undefined, "still alive");
+  assert.ok(!s.entities.some((e) => e.holder === kid.id && e.kind === "stick"), "never picked up a stick to sharpen");
+  const meat = s.spawn("cooked_meat", kid.x, kid.y, { cook: 60 });
+  meat.holder = kid.id;
+  s.step();
+  assert.equal(meat.removed, true, "eaten on the very next tick");
+  assert.equal(kid.tally.meals, 1);
+});

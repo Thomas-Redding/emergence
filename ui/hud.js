@@ -7,7 +7,12 @@ const MIN_SLOTS = 5; // empty slots make it read as a hotbar
 
 export function hudHtml(model, { title, hint }) {
   let h = "";
+  if (model.speech?.incoming) {
+    const p = model.speech.incoming;
+    h += `<div class="prompt">human#${p.from} wants to ${esc(p.kind)} — <kbd>Y</kbd> accept &nbsp; <kbd>N</kbd> decline <span class="left">(${p.left}t)</span></div>`;
+  }
   if (hint) h += `<div class="hint">${esc(hint)}</div>`;
+  if (model.speech?.outgoing) h += `<div class="hint">waiting for an answer... <span class="left">(${model.speech.outgoing.left}t)</span></div>`;
   if (model.actions.length) {
     h += '<div class="actions">';
     for (const a of model.actions) {
