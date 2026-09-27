@@ -1,0 +1,195 @@
+{
+ "version": 1,
+ "config": {
+  "brains": [
+   "forager"
+  ],
+  "npcs": 8,
+  "ticks": 15000,
+  "layout": "spread",
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12
+  ]
+ },
+ "runs": [
+  {
+   "seed": 1,
+   "metrics": {
+    "survival": 0.75,
+    "lifetime": 0.9749666666666666,
+    "mealsPer1000": 0.9658449861533728,
+    "killsPer1000": 0.9658449861533728,
+    "herdMean": 87.11666666666666,
+    "herdMin": 72,
+    "herdExtinct": 0,
+    "grassPct": 30.594392237756896,
+    "msPer1000": 294.88295
+   }
+  },
+  {
+   "seed": 2,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.9583166666666667,
+    "mealsPer1000": 0.9739299813909807,
+    "killsPer1000": 0.9739299813909807,
+    "herdMean": 69.48333333333333,
+    "herdMin": 54,
+    "herdExtinct": 0,
+    "grassPct": 52.38815374921235,
+    "msPer1000": 391.0536444666667
+   }
+  },
+  {
+   "seed": 3,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.9749833333333333,
+    "mealsPer1000": 0.9829227850048718,
+    "killsPer1000": 0.9829227850048718,
+    "herdMean": 85.18333333333334,
+    "herdMin": 70,
+    "herdExtinct": 0,
+    "grassPct": 33.06614662103001,
+    "msPer1000": 412.51927226666663
+   }
+  },
+  {
+   "seed": 4,
+   "metrics": {
+    "survival": 1,
+    "lifetime": 1,
+    "mealsPer1000": 1,
+    "killsPer1000": 1,
+    "herdMean": 128.91666666666666,
+    "herdMin": 92,
+    "herdExtinct": 0,
+    "grassPct": 11.624183425131292,
+    "msPer1000": 443.2763250000001
+   }
+  },
+  {
+   "seed": 5,
+   "metrics": {
+    "survival": 1,
+    "lifetime": 1,
+    "mealsPer1000": 1,
+    "killsPer1000": 1,
+    "herdMean": 109.11666666666666,
+    "herdMin": 70,
+    "herdExtinct": 0,
+    "grassPct": 25.641467788660506,
+    "msPer1000": 442.8887083333333
+   }
+  },
+  {
+   "seed": 6,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.89165,
+    "mealsPer1000": 0.9813267537710986,
+    "killsPer1000": 0.9813267537710986,
+    "herdMean": 112,
+    "herdMin": 91,
+    "herdExtinct": 0,
+    "grassPct": 19.943650066915545,
+    "msPer1000": 396.51922500000023
+   }
+  },
+  {
+   "seed": 7,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.96665,
+    "mealsPer1000": 0.9827755650959499,
+    "killsPer1000": 0.9827755650959499,
+    "herdMean": 79.71666666666667,
+    "herdMin": 62,
+    "herdExtinct": 0,
+    "grassPct": 37.80531404891525,
+    "msPer1000": 393.19841113333337
+   }
+  },
+  {
+   "seed": 8,
+   "metrics": {
+    "survival": 1,
+    "lifetime": 1,
+    "mealsPer1000": 1,
+    "killsPer1000": 1,
+    "herdMean": 89.66666666666667,
+    "herdMin": 51,
+    "herdExtinct": 0,
+    "grassPct": 40.64998899567163,
+    "msPer1000": 423.7622555333335
+   }
+  },
+  {
+   "seed": 9,
+   "metrics": {
+    "survival": 1,
+    "lifetime": 1,
+    "mealsPer1000": 1,
+    "killsPer1000": 1,
+    "herdMean": 124.41666666666667,
+    "herdMin": 86,
+    "herdExtinct": 0,
+    "grassPct": 13.462672871468834,
+    "msPer1000": 450.74800560000006
+   }
+  },
+  {
+   "seed": 10,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.89165,
+    "mealsPer1000": 0.9813267537710986,
+    "killsPer1000": 0.9813267537710986,
+    "herdMean": 89.2,
+    "herdMin": 62,
+    "herdExtinct": 0,
+    "grassPct": 34.207620528771386,
+    "msPer1000": 380.72540000000004
+   }
+  },
+  {
+   "seed": 11,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.89165,
+    "mealsPer1000": 0.9813267537710986,
+    "killsPer1000": 0.9813267537710986,
+    "herdMean": 105.03333333333333,
+    "herdMin": 65,
+    "herdExtinct": 0,
+    "grassPct": 28.16251087271673,
+    "msPer1000": 388.99574166666616
+   }
+  },
+  {
+   "seed": 12,
+   "metrics": {
+    "survival": 0.875,
+    "lifetime": 0.9249833333333334,
+    "mealsPer1000": 0.9819996756698319,
+    "killsPer1000": 0.9910088470062524,
+    "herdMean": 110.63333333333334,
+    "herdMin": 89,
+    "herdExtinct": 0,
+    "grassPct": 17.22915345034186,
+    "msPer1000": 392.032438866667
+   }
+  }
+ ]
+}

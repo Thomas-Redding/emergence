@@ -28,7 +28,15 @@ export function median(a) {
 
 // ---------- brains ----------
 // Named brains shipped with the repo (paths relative to this file).
-const REGISTRY = { basic: ["../npcs/basic.js", "basicNpc"], idle: ["../npcs/idle.js", "idle"] };
+const REGISTRY = {
+  basic: ["../npcs/basic.js", "basicNpc"],
+  idle: ["../npcs/idle.js", "idle"],
+  forager: ["../npcs/forager.js", "forager"],
+  "forager-nowaste": ["../npcs/forager.js", "foragerNoWaste"], // eat without waste, but hunt as basic does
+  "forager-r15": ["../npcs/forager.js", "foragerR15"],
+  "forager-r2": ["../npcs/forager.js", "foragerR2"],
+  "forager-r3": ["../npcs/forager.js", "foragerR3"],
+};
 
 export async function loadBrain(spec) {
   let name = spec, url, exportName, shown;

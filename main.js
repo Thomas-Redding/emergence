@@ -2,7 +2,7 @@ import { Sim } from "./sim/sim.js";
 import { hashState } from "./sim/hash.js";
 import { makeInput, inputBrain, scriptedBrain } from "./sim/brains.js";
 import { TileMemory } from "./sim/memory.js";
-import { basicNpc } from "./npcs/basic.js";
+import { forager } from "./npcs/forager.js";
 import { draw, zoomAt, screenToWorld, interpPos, panCamera } from "./render/render.js";
 import { buildHud } from "./ui/inventory.js";
 import { actionPlans, ACTION_KEYS, FAIL_TEXT } from "./ui/controls.js";
@@ -19,7 +19,7 @@ const observer = params.has("observer");
 // just another actor: whatever brain is passed in drives it (live input, or a replay's script).
 function makeSim(humanBrain) {
   const s = new Sim({ seed });
-  for (let i = 0; i < 3; i++) s.addActor(basicNpc, 40 + i * 8, 48);
+  for (let i = 0; i < 3; i++) s.addActor(forager, 40 + i * 8, 48);
   if (!observer) s.addActor(humanBrain, 48, 52, { record: true });
   return s;
 }

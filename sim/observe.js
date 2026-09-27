@@ -1,4 +1,4 @@
-import { VIEW_RADIUS, FOOD_MAX, REACH, STAB_FACING_COS, DEER_FAWN_TICKS } from "./constants.js";
+import { VIEW_RADIUS, FOOD_MAX, REACH, STAB_FACING_COS, DEER_FAWN_TICKS, MEAT_FOOD, FOOD_DECAY_EVERY } from "./constants.js";
 import { FOREST } from "./worldgen.js";
 import { visionGrid, canSeePoint } from "./vision.js";
 
@@ -48,6 +48,9 @@ export function observe(sim, actor) {
   return {
     tick: sim.tick,
     reach: { ...REACH, stabFacingCos: STAB_FACING_COS },
+    // The rules a brain can reason with: a cooked meal restores mealFood (capped at self.foodMax), and
+    // food drains by foodPerTick.
+    rules: { mealFood: MEAT_FOOD, foodPerTick: 1 / FOOD_DECAY_EVERY },
     self: { id: actor.id, x: actor.x, y: actor.y, facing: [...actor.facing], food: actor.food, foodMax: FOOD_MAX, inventory },
     view: { radius: R, x0: vis.x0, y0: vis.y0, tiles, grass, entities },
     lastResult: { ...actor.lastResult },

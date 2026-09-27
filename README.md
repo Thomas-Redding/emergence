@@ -17,7 +17,7 @@ Open `http://localhost:8000/?seed=1` (any integer seed works).
 
 | URL | What you get |
 |---|---|
-| `/?seed=7` | play as a human alongside three baseline NPCs |
+| `/?seed=7` | play as a human alongside three `forager` NPCs |
 | `/?seed=7&observer` | no player: a god's-eye view of the NPCs (the **Observe / Play** button switches; it restarts the game) |
 
 ### Controls
@@ -135,7 +135,7 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 | `cook {item, fire}` | +1 progress on held raw meat next to a lit fire |
 | `eat {item}` | eat cooked meat |
 
-`npcs/basic.js` is a complete example, and `npcs/lib.js` has helpers (tile pathfinding that steers to real positions, `walkNear`, `explore`, ...).
+`npcs/basic.js` is a complete example, and `npcs/forager.js` builds on its parts with a different top-level policy about *when* to hunt and eat: `basic` eats whenever food < 800 (wasting up to 300 of each 500-food meal) and hunts whenever food < 900 even with cooked meat in its pack, so it kills nearly twice what it needs and, in a group, collapses the herd it lives on (with 8 NPCs only 36% are alive after 15,000 ticks). `forager` eats only when a whole meal fits and hunts only when the energy it carries (food plus meat) is below a two-meal reserve: it kills exactly what it eats, and 91% of 8 NPCs survive with a healthy herd (9 NPCs: 93%; 12: 71%). `npcs/lib.js` has helpers (tile pathfinding that steers to real positions, `walkNear`, `explore`, ...).
 
 ### Players, replay and memory
 
@@ -169,7 +169,7 @@ node tools/bench.mjs --help
 
 It runs each brain headless over many seeds and reports how many NPCs survive, how long they live, meals and kills per 1000 ticks alive, the deer herd (mean, lowest, whether it died out), grass left, and speed. Every run is deterministic, so the same command gives the same numbers (apart from the speed line). Brains are named (`basic`, `idle`) or a file (`path/to/brain.js`, using its default or `brain` export, or `path/to/brain.js:exportName`).
 
-Comparisons are **paired by seed**: brain B and brain A play the same worlds, so the difference is far less noisy than comparing two averages. Differences are shown with their standard error and a z score (`*` means |z| >= 2, `**` means |z| >= 3). `idle` (a brain that does nothing) is a handy floor: it starves at tick 2,000. `tools/baselines/basic-3npc.json` is a saved reference for the baseline NPC. The library behind it is `tools/harness.mjs` (import `runScenario`, `summarize`, `pairedDiff`, ...) if you want to script your own experiments.
+Comparisons are **paired by seed**: brain B and brain A play the same worlds, so the difference is far less noisy than comparing two averages. Differences are shown with their standard error and a z score (`*` means |z| >= 2, `**` means |z| >= 3). `idle` (a brain that does nothing) is a handy floor: it starves at tick 2,000. `basic` is the original NPC and `forager` is a more careful one (see below). `tools/baselines/` holds saved references (valid only for the current sim rules; re-save after changing them). The library behind it is `tools/harness.mjs` (import `runScenario`, `summarize`, `pairedDiff`, ...) if you want to script your own experiments.
 
 ## Not built yet
 

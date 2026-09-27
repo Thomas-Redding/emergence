@@ -3,7 +3,7 @@ import { dist, held, around, nearest, walkNear, explore, facingToward, withMemor
 
 // `mem` is the NPC's own memory (unreachable ids, where it built its fire): plain generator-local state.
 // It has to remember, because it only ever sees what's in front of it.
-function* getSticks(obs, rng, count, mem) {
+export function* getSticks(obs, rng, count, mem) {
   while (held(obs, "stick").length < count) {
     const s = nearest(obs, around(obs, "stick").filter((e) => !mem.bad.has(e.id)));
     if (!s) { obs = yield* explore(obs, rng, 24, (o) => around(o, "stick").some((e) => !mem.bad.has(e.id))); continue; }
@@ -14,7 +14,7 @@ function* getSticks(obs, rng, count, mem) {
   return obs;
 }
 
-function* makeSpear(obs, rng, mem) {
+export function* makeSpear(obs, rng, mem) {
   obs = yield* getSticks(obs, rng, 1, mem);
   // Commit to one stick (most progressed) so partial work is never split across sticks.
   const stick = held(obs, "stick").reduce((a, b) => (b.sharpness > a.sharpness ? b : a));
@@ -25,7 +25,7 @@ function* makeSpear(obs, rng, mem) {
   return obs;
 }
 
-function* hunt(obs, rng) {
+export function* hunt(obs, rng) {
   const deer = nearest(obs, around(obs, "deer"));
   if (!deer) return yield* explore(obs, rng, 24, (o) => around(o, "deer").length > 0);
   const id = deer.id;
@@ -56,7 +56,7 @@ function* hunt(obs, rng) {
   return obs;
 }
 
-function* cook(obs, rng, mem) {
+export function* cook(obs, rng, mem) {
   const meatId = held(obs, "raw_meat")[0].id;
   if (!mem.fire) {
     const seen = nearest(obs, around(obs, "fire"));
