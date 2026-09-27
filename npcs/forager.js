@@ -85,7 +85,12 @@ function* seekMate(obs, rng, mem, fam) {
 }
 
 export function makeForager({ eat = "no-waste", gate = "reserve", reserve = 2, family = null } = {}) {
-  const fam = family && { mateReserve: 1500, maxDependents: 1, giveBelow: 800, ...family };
+  // mateReserve: chosen with tools/population.mjs (60,000 ticks, 4 seeds, 6 founders). It's a real
+  // tradeoff, not a solved number: lower means the population declines because it barely reproduces;
+  // around 1000 is worst (a coincidence with the ordinary hunting reserve that made things flap between
+  // the two); 1300 kept the best average population among what was tried, but every value tested still
+  // left about a 1-in-4 chance of a bad population crash within that window. See the README.
+  const fam = family && { mateReserve: 1300, maxDependents: 1, giveBelow: 800, ...family };
 
   function* brain(obs, rng) {
     const mem = { bad: new Set(), fire: null, blocked: {} };
@@ -97,11 +102,14 @@ export function makeForager({ eat = "no-waste", gate = "reserve", reserve = 2, f
       const groundMeat = nearest(obs, around(obs, "raw_meat").filter((e) => !mem.bad.has(e.id)));
       const stock = (held(obs, "cooked_meat").length + held(obs, "raw_meat").length) * meal;
       const canEat = eat === "legacy" ? food < 800 : food <= cap - meal;
-      // each child still growing up is one more mouth: keep a spare meal in hand for it
+      // each child still growing up is one more mouth: keep a spare meal in hand for it. Deliberately
+      // NOT escalated just because this person is "eligible" to have a child (i.e. nearly always, for
+      // any adult without one already growing up): that made almost the whole adult population hunt
+      // for a permanent surplus at once, which crashed the herd on its own, before anyone even had a
+      // child. Wanting a child stays opportunistic: it happens when the ordinary reserve (below)
+      // naturally runs ahead of what is being eaten, not because everyone is grinding toward it.
       const dependents = fam ? obs.family.kids.filter((k) => k.dependent) : [];
-      // ...and someone who could have a child stocks up to what a child takes before looking for a partner
-      const wantMeals = fam && eligible(obs, fam) ? Math.max(reserve, fam.mateReserve / meal) : reserve;
-      const wantsMeat = gate === "legacy" ? food < 900 : food + stock < (wantMeals + dependents.length) * meal;
+      const wantsMeat = gate === "legacy" ? food < 900 : food + stock < (reserve + dependents.length) * meal;
       const dueKid = fam && cooked ? dependents.filter((k) => k.foodEst <= fam.giveBelow).sort((a, b) => a.foodEst - b.foodEst)[0] : null;
 
       if (fam && cooked && food < 250) {

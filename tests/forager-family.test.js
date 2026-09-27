@@ -121,7 +121,7 @@ test("someone with a growing child keeps a spare meal for it when deciding wheth
   const firstAction = (brain, { withChild }) => {
     const s = meadow();
     const a = s.addActor(brain, 40, 40), b = s.addActor(brain, 41, 40);
-    stock(s, a, { meals: 1, food: 900 }); // 900 + 500 = 1400 energy on hand
+    stock(s, a, { meals: 1, food: 900 }); // 900 + 500 = 1400 energy on hand: above the plain 2-meal reserve (1000)
     stock(s, b, { meals: 1, food: 900 });
     if (withChild) { s.run(1); s.tick -= 1; s.mate(a, b); s.tick += 1; } // (a child, born the way a real birth happens)
     a.food = 900;
@@ -129,9 +129,31 @@ test("someone with a growing child keeps a spare meal for it when deciding wheth
     s.run(3);
     return a.lastResult.action;
   };
-  // without a child: 1400 >= the 2-meal reserve, and the cooldown-free adult wants a child: it looks for a partner, not deer
+  // with a dependent child: the reserve grows by a meal (3 total = 1500), so 1400 isn't enough yet: it hunts
   const withChild = firstAction(foragerFamily, { withChild: true });
   assert.ok(["move", "stab", "face"].includes(withChild), `with a dependent child (1400 < 3 meals): it hunts (${withChild})`);
+});
+
+// Regression: an earlier version raised the hunting target for EVERY childless, cooldown-free adult up to
+// mateReserve (not just the plain 2-meal reserve) the moment it became merely eligible to have a child, long
+// before it actually wanted one. Since nearly the whole adult population is "eligible" nearly all the time,
+// that meant almost everyone hunted for a permanent surplus at once — which crashed the deer herd on its
+// own, before any child was ever born. Wanting a child must stay opportunistic: a side effect of sometimes
+// having more than you need, not something everyone is constantly grinding toward.
+test("an eligible-but-childless adult with the ordinary 2-meal reserve doesn't go on hunting toward mateReserve", () => {
+  // food + one held meal = 1100: past the plain reserve (1000, so it should be content) but short of
+  // mateReserve (1300, so under the old bug it would still have gone hunting for more).
+  const firstAction = (food) => {
+    const s = meadow();
+    const a = s.addActor(foragerFamily, 40, 40);
+    stock(s, a, { meals: 1, food }); // already has a spear (stock()'s default) and two spare sticks
+    s.spawnDeer(a.x, a.y + 3, { age: 5000, energy: 1000, facing: [0, 1] }); // right there, facing away: an easy, tempting kill
+    s.run(2);
+    return a.lastResult;
+  };
+  const r = firstAction(600); // 600 + 500 = 1100
+  assert.notEqual(r.action, "stab", `went for the easy kill at 1100 energy, past the ordinary reserve: ${JSON.stringify(r)}`);
+  assert.notEqual(r.action, "move", `walked toward it at 1100 energy: ${JSON.stringify(r)}`);
 });
 
 test("it turns down a proposal it doesn't want, saying so, and never freezes waiting for it", () => {

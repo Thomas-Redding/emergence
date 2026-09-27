@@ -211,6 +211,21 @@ It runs each brain headless over many seeds and reports how many NPCs starve (dy
 
 Comparisons are **paired by seed**: brain B and brain A play the same worlds, so the difference is far less noisy than comparing two averages. Differences are shown with their standard error and a z score (`*` means |z| >= 2, `**` means |z| >= 3). `idle` (a brain that does nothing) is a handy floor: it starves at tick 2,000. `basic` is the original NPC and `forager` is a more careful one (see below). `tools/baselines/` holds saved references (valid only for the current sim rules; re-save after changing them). The library behind it is `tools/harness.mjs` (import `runScenario`, `summarize`, `pairedDiff`, ...) if you want to script your own experiments.
 
+### Watching the human population
+
+```bash
+node tools/population.mjs [seeds=6] [ticks=150000] [npcs=6] [layout=spread]
+```
+
+runs `forager-family` for a long time and prints both the human and deer counts over time, per seed, plus whether either ever hit zero. Where `tools/bench.mjs` scores a brain over a short fixed window, this watches the whole system over a long one to answer a different question: does the population settle into something stable, or does it crash?
+
+**It isn't fully solved.** A population that hunts and breeds finds its own size the same way the deer do (no cap, no artificial floor), but tuning it turned out harder than tuning a single forager, because many individually reasonable hunters share one herd. Two things came out of that work so far:
+
+- **A real bug, fixed:** the first version of `forager-family` raised its hunting target for *every* childless, cooldown-off adult the moment it became merely eligible to have a child (long before it actually wanted one) — and since nearly the whole adult population is eligible nearly all the time, that meant almost everyone hunted for a personal surplus simultaneously, crashing the herd before anyone even had a child. Wanting a child is now purely opportunistic: a side effect of sometimes ending up with more food than you need, not something every adult is constantly grinding toward. This alone roughly halved how often a run crashed.
+- **It still isn't fully reliable.** A sweep of `mateReserve` (the surplus needed to want a child) over a handful of seeds found no value that eliminated crashes; raising it doesn't reliably help, because a higher threshold mostly means individuals hold onto more surplus rather than hunting less overall. `forager-family`'s current default (1300) was the best of what was tried; confirmed over 8 seeds at 6 founders and 60,000 ticks, it gave 1 outright extinction (both species, seed 4) and several more runs with a visible boom (population rising to 9-16) followed by a crash (down to 1-2 people, deer as low as 11-25) that didn't quite cross zero. The forager's hunting decision is entirely local (its own food and its own children); it has no way to sense that the *shared* herd is already stressed, which is the textbook shape of a tragedy of the commons. A brain that could sense scarcity (fewer deer sighted recently, more failed hunts) and throttle itself accordingly is the natural next step, and hasn't been built.
+
+The game itself still uses the plain `forager` (no births). `forager-family` is there to build on and to measure against.
+
 ## Not built yet
 
 Houses and building, combat between people, more animals, day/night, click-to-move, and saving/loading (replay from seed plus log works today). PRs and ideas welcome.
