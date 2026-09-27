@@ -38,6 +38,7 @@ export class Sim {
     this.nextProposalId = 1;
     this.declineUntil = new Map(); // "from:to" -> tick before which `from` can't ask `to` again
     this.speechQueue = []; // speech from this tick's actions, resolved after everyone has acted
+    this.notices = []; // [person, event] notifications caused by this tick's actions, delivered at its end
     // What each kind of proposal does when accepted. accept(sim, proposer, recipient) -> { ok, reason? }.
     // (Tests can register their own kinds here.)
     this.proposalKinds = new Map([["mate", { accept: (sim, proposer, recipient) => sim.mate(proposer, recipient) }]]);
@@ -251,6 +252,13 @@ export class Sim {
   emit(person, event) {
     person.inbox.push(event);
     if (person.inbox.length > C.INBOX_MAX) person.inbox.shift();
+  }
+
+  // Like emit, but delivered at the end of the tick, so it arrives on the next tick whether or not the
+  // person happened to act after whoever caused it. (The item itself changes hands at once, in acting order,
+  // like every other action; this is only the notification.)
+  emitLater(person, event) {
+    this.notices.push([person, event]);
   }
 
   // End a pending proposal with an outcome, telling both people (whoever is still around).
@@ -469,6 +477,8 @@ export class Sim {
     this.expireProposals();
     for (const a of humans) if (!a.removed) this.stepActor(a); // id order
     this.resolveSpeech();
+    for (const [person, event] of this.notices) if (!person.removed) this.emit(person, event);
+    this.notices = [];
     this.stepFires();
     this.stepDeer(humans.filter((h) => !h.removed));
     this.dropSticks();

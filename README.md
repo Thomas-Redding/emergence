@@ -112,7 +112,7 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 
 ```
 { tick,
-  reach: { pickup, stab, fire, talk, stabFacingCos },    // how close/aligned you must be
+  reach: { pickup, stab, fire, give, talk, stabFacingCos }, // how close/aligned you must be
   rules: { mealFood, foodPerTick, adultAge, lifespan: [lo, hi],      // what food and age are worth
            mate: { minFood, cost, cooldown, childFood }, proposalTicks },
   self:  { id, x, y, facing: [fx, fy], age, food, foodMax,
@@ -140,6 +140,7 @@ Two caveats for brain authors: a loop that never `yield`s will hang the whole si
 | `make_fire {items: [a, b]}` | consume two held sticks to place an unlit fire at your feet |
 | `tend {item}` | +1 progress on a fire within `reach.fire` |
 | `cook {item, fire}` | +1 progress on held raw meat next to a lit fire |
+| `give {item, to}` | hand something you carry to a person within `reach.give` (1.5 tiles); they get a private `gift` event |
 | `eat {item}` | eat cooked meat |
 
 #### Speech: asking, and being answered
@@ -164,11 +165,14 @@ events: [ { type: "proposal",        id, kind, from, expires },       // someone
           { type: "proposal_sent",   id, kind, to, expires },         // yours went out
           { type: "proposal_result", id, kind, with, outcome, reason? },   // accepted | declined | expired | invalid | gone
           { type: "birth", child, with },                                  // you had a child (with `with`)
+          { type: "gift", from, item, kind },                              // someone gave you something
           { type: "speech_failed",   speech, reason } ]               // out_of_range, not_visible, already_pending, cooldown, ...
 proposals: { incoming: [{ id, kind, from, expires }], outgoing: { id, kind, to, expires } | null }
 ```
 
-`npcs/basic.js` is a complete example, and `npcs/forager.js` builds on its parts with a different top-level policy about *when* to hunt and eat: `basic` eats whenever food < 800 (wasting up to 300 of each 500-food meal) and hunts whenever food < 900 even with cooked meat in its pack, so it kills nearly twice what it needs and, in a group, collapses the herd it lives on (with 8 NPCs only 36% are alive after 15,000 ticks). `forager` eats only when a whole meal fits and hunts only when the energy it carries (food plus meat) is below a two-meal reserve: it kills exactly what it eats, and 91% of 8 NPCs survive with a healthy herd (9 NPCs: 93%; 12: 71%). `npcs/lib.js` has helpers (tile pathfinding that steers to real positions, `walkNear`, `explore`, ...).
+`npcs/basic.js` is a complete example, and `npcs/forager.js` builds on its parts with a different top-level policy about *when* to hunt and eat: `basic` eats whenever food < 800 (wasting up to 300 of each 500-food meal) and hunts whenever food < 900 even with cooked meat in its pack, so it kills nearly twice what it needs and, in a group, collapses the herd it lives on (with 8 NPCs only 36% are alive after 15,000 ticks). `forager` eats only when a whole meal fits and hunts only when the energy it carries (food plus meat) is below a two-meal reserve: it kills exactly what it eats, and 91% of 8 NPCs survive with a healthy herd (9 NPCs: 93%; 12: 71%). `npcs/forager.js` also has a family variant, `forager-family`: when it is fed and idle it looks for another adult, proposes, and answers proposals; it feeds its children with `give` on a schedule (keeping an estimate of each child's food, since it can't see it); each child still growing up adds a meal to its hunting reserve; and its children, who run the same brain, get a built-in childhood: they eat what they are given, follow a parent and wait nearby (a still child hardly alarms deer), turn on the spot to look for a parent they lose, and take the brain over at adulthood. The pieces are reusable wrappers in `npcs/lib.js`: `withFamily(brain, {reply})` gives a brain `obs.family` (its children, with a food estimate and where each was last seen, who it has seen and where, and when it last had a child) and lets it answer proposals *without interrupting what it is doing* (the reply rides along on whatever action it takes, thanks to the speech side channel); `withChildhood(brain)` gives children their built-in life; and `moveToward(obs, x, y)` returns one step toward a point (or null), so a loop can `yield` exactly once per pass, since a brain loop that goes round without yielding freezes the game.
+
+`npcs/lib.js` has helpers (tile pathfinding that steers to real positions, `walkNear`, `explore`, ...).
 
 ### Players, replay and memory
 

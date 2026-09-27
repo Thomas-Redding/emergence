@@ -94,6 +94,18 @@ function mergeMemory(obs, memory) {
   return { ...obs, view: { ...obs.view, tiles: merged }, memory };
 }
 
+// One step of walking toward the point (tx,ty): a move action, or null if you are already within `within`
+// of it or there is no way there. Because it never blocks, a loop like
+//   const a = moveToward(...); obs = yield a ?? { type: "wait" };
+// yields exactly once per iteration (a brain loop that can go round without yielding hangs the whole game).
+export function moveToward(obs, tx, ty, { within = 0.9, sneak = false } = {}) {
+  if (dist(obs.self, { x: tx, y: ty }) <= within) return null;
+  const step = pathNext(obs, (x, y) => (x + 0.5 - tx) * (x + 0.5 - tx) + (y + 0.5 - ty) * (y + 0.5 - ty) <= within * within);
+  if (!step) return null;
+  const [gx, gy] = step === "here" ? [tx, ty] : [step[0] + 0.5, step[1] + 0.5];
+  return { type: "move", dx: gx - obs.self.x, dy: gy - obs.self.y, sneak };
+}
+
 // Generator helpers: use with `obs = yield* ...`. They return the latest observation.
 
 // Walk until within `within` of the point (tx,ty). Gives up if unreachable, after maxTicks, or if
@@ -126,6 +138,136 @@ export function* explore(obs, rng, steps = 24, until = null) {
     }
     obs = yield { type: "move", dx: dir[0], dy: dir[1] };
     if (!obs.lastResult.ok) dir = randomDir(rng);
+  }
+  return obs;
+}
+
+// ---------- families ----------
+
+// Give an adult brain what it needs to be a parent, and let it answer proposals without interrupting what it is
+// doing (speech is a side channel, so a reply rides along with whatever action the brain yields).
+// The wrapped brain's observations gain `obs.family`:
+//   kids:  [{ id, bornTick, dependent, foodEst, lastFedTick, lastSeen: {x,y,tick}|null }]  your living children.
+//          foodEst is a running ESTIMATE of the child's food (you can't see it): it starts at the newborn's food,
+//          falls at the ordinary rate, and rises by a meal each time a `give` of cooked meat succeeds.
+//          dependent: still a child (younger than the adulthood age).
+//   lastBirthTick: when you last had a child (null if never).
+//   people: { [id]: { x, y, tick, adult } } everyone you have seen, and where and when you last saw them.
+// reply(obs): called each tick a reply is possible; return { to, accept } to answer a proposal, or null.
+export function withFamily(brainFn, { reply = null } = {}) {
+  return function* (obs, rng) {
+    const fam = { kids: [], lastBirthTick: null, people: {} };
+    let prev = null, lastAction = null;
+    const view = (o) => ({ ...o, family: fam });
+
+    const update = (o) => {
+      const { foodPerTick, mealFood, adultAge, mate } = o.rules;
+      const dt = prev ? o.tick - prev.tick : 1;
+      for (const k of fam.kids) k.foodEst = Math.max(0, k.foodEst - dt * foodPerTick);
+      // a gift of cooked meat that went through: the child will eat it
+      if (prev && lastAction && lastAction.type === "give" && o.lastResult.ok && o.lastResult.action === "give") {
+        const kid = fam.kids.find((k) => k.id === lastAction.to);
+        const item = prev.self.inventory.find((i) => i.id === lastAction.item);
+        if (kid && item && item.kind === "cooked_meat") {
+          kid.foodEst = Math.min(o.self.foodMax, kid.foodEst + mealFood);
+          kid.lastFedTick = o.tick;
+        }
+      }
+      for (const e of o.events) {
+        if (e.type === "birth") { // (delivered the tick after the birth)
+          fam.kids.push({ id: e.child, bornTick: o.tick - 1, dependent: true, foodEst: mate.childFood - foodPerTick, lastFedTick: null, lastSeen: null });
+          fam.lastBirthTick = o.tick - 1;
+        }
+      }
+      const living = new Set(o.self.children);
+      fam.kids = fam.kids.filter((k) => living.has(k.id));
+      for (const id of living) { // a child we never heard the birth of (e.g. this brain was swapped in later)
+        if (!fam.kids.some((k) => k.id === id)) fam.kids.push({ id, bornTick: o.tick, dependent: true, foodEst: mate.childFood, lastFedTick: null, lastSeen: null });
+      }
+      for (const k of fam.kids) k.dependent = o.tick - k.bornTick < adultAge;
+      for (const e of o.view.entities) {
+        if (e.kind !== "human") continue;
+        fam.people[e.id] = { x: e.x, y: e.y, tick: o.tick, adult: e.adult };
+        const kid = fam.kids.find((k) => k.id === e.id);
+        if (kid) kid.lastSeen = { x: e.x, y: e.y, tick: o.tick };
+      }
+      prev = o;
+    };
+
+    update(obs);
+    const inner = brainFn(view(obs), rng);
+    let r = inner.next();
+    while (!r.done) {
+      let action = r.value;
+      if (reply && action && typeof action === "object" && action.propose === undefined && action.respond === undefined) {
+        const answer = reply(view(obs));
+        if (answer) action = { ...action, respond: answer };
+      }
+      lastAction = action;
+      obs = yield action;
+      update(obs);
+      r = inner.next(view(obs));
+    }
+    return r.value;
+  };
+}
+
+// Childhood, built in: until adulthood a person is given this life instead of running the wrapped brain
+// (a child can't hunt, and can't ask for food), and then the wrapped brain takes over. A child
+//   - eats cooked meat it is carrying, as soon as a whole meal (nearly) fits;
+//   - picks up cooked meat lying around;
+//   - stays near a parent, and waits there (a moving child alarms deer; a still one hardly does).
+// Parents feed it with `give` (see makeForager).
+export function withChildhood(brainFn) {
+  return function* (obs, rng) {
+    obs = yield* childLife(obs, rng);
+    return yield* brainFn(obs, rng);
+  };
+}
+
+const CHILD_EAT_SLACK = 100; // eats once at most this much of a meal would be wasted
+const CHILD_STAY_NEAR = 4; // follows once a parent is further than this...
+const CHILD_CLOSE_ENOUGH = 3; // ...until within this
+
+const SCAN_DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+const SCAN_TICKS_EACH = 3; // how long it faces each way while looking for a parent
+const SCAN_ROUNDS = 4; // ...and how many times round before it gives up and wanders
+
+function* childLife(obs, rng) {
+  let lastParent = null, scanned = 0;
+  while (obs.self.age < obs.rules.adultAge) {
+    const me = obs.self, r = obs.rules;
+    const parents = me.parents ?? [];
+    const cooked = held(obs, "cooked_meat")[0];
+    const parent = nearest(obs, obs.view.entities.filter((e) => e.kind === "human" && parents.includes(e.id)));
+    if (parent) { lastParent = { x: parent.x, y: parent.y }; scanned = 0; }
+
+    let action;
+    if (cooked && me.food <= me.foodMax - r.mealFood + CHILD_EAT_SLACK) {
+      action = { type: "eat", item: cooked.id };
+    } else {
+      const spare = nearest(obs, around(obs, "cooked_meat"));
+      if (spare) {
+        action = dist(obs.self, spare) <= obs.reach.pickup ? { type: "pickup", item: spare.id } : moveToward(obs, spare.x, spare.y, { within: obs.reach.pickup * 0.8 });
+      } else if (parent) {
+        action = dist(obs.self, parent) > CHILD_STAY_NEAR ? moveToward(obs, parent.x, parent.y, { within: CHILD_CLOSE_ENOUGH }) : null;
+      } else if (lastParent && dist(obs.self, lastParent) > 2) {
+        action = moveToward(obs, lastParent.x, lastParent.y, { within: 2 }); // went out of sight: go to where it was
+      } else if (lastParent) {
+        // Where it last saw them, and they aren't in view. You only see what is in front of you, so turn on the
+        // spot to look all round; only if that fails, wander.
+        const round = Math.floor(scanned / (SCAN_TICKS_EACH * SCAN_DIRS.length));
+        if (round < SCAN_ROUNDS) {
+          const [dx, dy] = SCAN_DIRS[Math.floor(scanned / SCAN_TICKS_EACH) % SCAN_DIRS.length];
+          action = { type: "face", dx, dy };
+        } else {
+          const d = randomDir(rng);
+          action = { type: "move", dx: d[0], dy: d[1] };
+        }
+        scanned++;
+      }
+    }
+    obs = yield action ?? { type: "wait" };
   }
   return obs;
 }

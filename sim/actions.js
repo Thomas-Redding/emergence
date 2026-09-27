@@ -124,6 +124,21 @@ const HANDLERS = {
     return ok();
   },
 
+  // Hand something you are carrying to a person within reach. It is theirs at once, and they are told
+  // (a private `gift` event). Anyone can be given anything; how it gets used is up to them.
+  give(sim, a, { item, to }) {
+    const e = held(sim, a, item);
+    if (!e) return fail("not_held");
+    const r = sim.byId(to);
+    if (!r || r.removed || r.kind !== "human" || r === a) return fail("no_such_person");
+    if (dist2(r, a) > C.REACH.give * C.REACH.give) return fail("out_of_reach");
+    e.holder = r.id;
+    e.x = r.x;
+    e.y = r.y;
+    sim.emitLater(r, { type: "gift", from: a.id, item: e.id, kind: e.kind });
+    return ok();
+  },
+
   eat(sim, a, { item }) {
     const m = held(sim, a, item);
     if (!m) return fail("not_held");

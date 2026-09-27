@@ -35,6 +35,7 @@ const REGISTRY = {
   "forager-nowaste": ["../npcs/forager.js", "foragerNoWaste"], // eat without waste, but hunt as basic does
   "forager-r15": ["../npcs/forager.js", "foragerR15"],
   "forager-r2": ["../npcs/forager.js", "foragerR2"],
+  "forager-family": ["../npcs/forager.js", "foragerFamily"], // mates, feeds its children, has a childhood
   "forager-r3": ["../npcs/forager.js", "foragerR3"],
 };
 

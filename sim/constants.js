@@ -19,7 +19,7 @@ export const SNEAK_SPEED = 0.25;
 export const BODY_HALF = 0.3; // creatures are squares 0.6 wide; trees fill whole tiles
 
 // How close you must be (distance between positions) to act on something.
-export const REACH = { pickup: 1.0, stab: 1.2, fire: 1.5 };
+export const REACH = { pickup: 1.0, stab: 1.2, fire: 1.5, give: 1.5 };
 // To stab you must be facing the target: within 60deg of your facing (literal cos, see exact-math note).
 export const STAB_FACING_COS = 0.5;
 
