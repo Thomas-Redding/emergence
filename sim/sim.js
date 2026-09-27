@@ -5,11 +5,12 @@ import { applyAction } from "./actions.js";
 import { canSeePoint } from "./vision.js";
 import * as C from "./constants.js";
 
-const DEER_PER_1000_TILES = 4;
 const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
 export class Sim {
-  constructor({ seed, width = 96, height = 96 }) {
+  // startingDeer: how many deer at tick 0 (default scales with map area); startingGrass: the fraction of
+  // each tile's grass capacity present at tick 0. Both only shape the opening: the herd then finds its own size.
+  constructor({ seed, width = 96, height = 96, startingDeer = null, startingGrass = C.GRASS_START_FRACTION }) {
     this.seed = seed;
     this.tick = 0;
     this.world = generateWorld(seed, width, height);
@@ -22,9 +23,9 @@ export class Sim {
     this.inputLog = []; // [{ tick, actor, action }] of every non-wait action by a recorded brain:
     //                     with the seed and the setup, everything needed to replay a session
     this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
-    this.grass = Uint8Array.from(this.world.grassCap); // the world starts lush; deer graze it down
-    const startingDeer = Math.floor((width * height * DEER_PER_1000_TILES) / 1000);
-    for (let i = 0; i < startingDeer; i++) this.spawnDeerRandom();
+    this.grass = Uint8Array.from(this.world.grassCap, (c) => Math.round(c * startingGrass));
+    const herd = startingDeer ?? Math.floor((width * height * C.DEER_START_PER_1000_TILES) / 1000);
+    for (let i = 0; i < herd; i++) this.spawnDeerRandom();
     for (let i = 0; i < C.INITIAL_STICKS; i++) this.dropStick(); // the forest floor starts with some
   }
 

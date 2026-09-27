@@ -48,6 +48,13 @@ export const GRASS_GROWTH_PLAINS = 2; // units regained per visit...
 export const GRASS_GROWTH_FOREST = 1;
 export const GRASS_REGROW_PERIOD = 1000; // ...and each tile is visited once per this many ticks (staggered)
 
+// How the world starts (only shapes the opening; the herd then finds its own size).
+// Chosen with a parameter sweep (8 seeds): the steady herd (~120 on the default map) doesn't depend on
+// these, but the opening boom does. Starting with fewer grass units flattens it a lot, and more starting
+// deer make it bigger, so: about twice the old herd, on a world that starts partly grazed down.
+export const GRASS_START_FRACTION = 0.2; // of each tile's capacity
+export const DEER_START_PER_1000_TILES = 8; // 73 deer on the default 96x96 map
+
 // ---- Deer life cycle. Time is in ticks (20 per second in the browser). ----
 export const DEER_ENERGY_MAX = 1000;
 export const DEER_METAB_EVERY = 4; // one energy lost per this many ticks (starve in ~4000 ticks)

@@ -6,7 +6,9 @@ import { DEER_FAWN_TICKS } from "../sim/constants.js";
 const LUSH = { ".": [[143, 191, 90], [139, 186, 86], [148, 195, 95]], ",": [[76, 138, 58], [71, 132, 53], [81, 143, 63]] };
 const BARE = { ".": [186, 166, 106], ",": [112, 118, 70] };
 const groundColor = (kind, variant, frac) => {
-  const a = LUSH[kind][variant], b = BARE[kind], t = 1 - Math.max(0, Math.min(1, frac));
+  // Perceived lushness isn't linear in grass amount: a tile with a fifth of its grass still reads as green.
+  // (sqrt keeps thin grass looking green and only turns a tile bare as it is almost eaten out.)
+  const a = LUSH[kind][variant], b = BARE[kind], t = 1 - Math.sqrt(Math.max(0, Math.min(1, frac)));
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
 };
 const GROUND_ITEMS = new Set(["fire", "stick", "spear", "raw_meat", "cooked_meat"]);
