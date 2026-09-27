@@ -110,14 +110,16 @@ test("declining ends it, and the asker can't ask the same person again for a whi
 });
 
 test("accepting a kind whose conditions fail is reported as invalid, with the reason", () => {
-  const { s, logs } = scene({
+  const { s, logs, actors } = scene({
     a: { at: A, script: (id) => ({ 0: propose(id.b, "mate") }) },
     b: { at: B_NEAR, script: (id) => ({ 1: respond(id.a, true) }) },
   });
+  actors.b.food = 100; // too hungry to mate
   s.run(3);
   const r = ofType(logs.a[2], "proposal_result")[0];
-  assert.deepEqual([r.outcome, r.reason], ["invalid", "not_implemented"], "'mate' exists but does nothing yet");
+  assert.deepEqual([r.outcome, r.reason], ["invalid", "recipient_hungry"]);
   assert.equal(s.proposals.length, 0);
+  assert.equal(s.stats.births, 0);
 });
 
 // Try one proposal in a prepared scene and return the reason it was refused (null if it went through).

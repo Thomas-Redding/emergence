@@ -18,10 +18,12 @@ export function hashState(sim) {
     mixFloat(e.x);
     mixFloat(e.y);
     mix(e.holder ?? -1);
-    for (const f of ["sharpness", "cook", "progress", "fuel", "food", "fleeTicks", "moveTicks", "energy", "age", "lifespan", "breedCooldown", "born"]) mix(e[f] ?? 0);
+    for (const f of ["sharpness", "cook", "progress", "fuel", "food", "fleeTicks", "moveTicks", "energy", "age", "lifespan", "breedCooldown", "born", "birthCooldown", "generation"]) mix(e[f] ?? 0);
     mix(e.grazing ? 1 : 0);
     if (e.target) { mix(e.target[0]); mix(e.target[1]); }
     mix(e.lit ? 1 : 0);
+    if (e.parents) for (const id of e.parents) mix(id);
+    if (e.children) { mix(e.children.length); for (const id of e.children) mix(id); }
     if (e.facing) { mixFloat(e.facing[0]); mixFloat(e.facing[1]); }
   }
   for (let i = 0; i < sim.grass.length; i++) mix(sim.grass[i]); // the grass is world state too

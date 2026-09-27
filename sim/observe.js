@@ -1,5 +1,6 @@
 import { VIEW_RADIUS, FOOD_MAX, REACH, STAB_FACING_COS, DEER_FAWN_TICKS, MEAT_FOOD, FOOD_DECAY_EVERY,
-  HUMAN_ADULT_TICKS, HUMAN_LIFESPAN_MIN, HUMAN_LIFESPAN_SPREAD, TALK_RANGE, PROPOSAL_TICKS } from "./constants.js";
+  HUMAN_ADULT_TICKS, HUMAN_LIFESPAN_MIN, HUMAN_LIFESPAN_SPREAD, TALK_RANGE, PROPOSAL_TICKS,
+  HUMAN_MATE_MIN_FOOD, HUMAN_BIRTH_COST, HUMAN_BIRTH_COOLDOWN, HUMAN_CHILD_FOOD } from "./constants.js";
 import { FOREST } from "./worldgen.js";
 import { visionGrid, canSeePoint } from "./vision.js";
 
@@ -56,9 +57,13 @@ export function observe(sim, actor) {
     // kill (each person's own value is not known to anyone, themselves included).
     rules: {
       mealFood: MEAT_FOOD, foodPerTick: 1 / FOOD_DECAY_EVERY,
-      proposalTicks: PROPOSAL_TICKS, adultAge: HUMAN_ADULT_TICKS, lifespan: [sim.humanLifespanMin, sim.humanLifespanMin + sim.humanLifespanSpread - 1],
+      proposalTicks: PROPOSAL_TICKS, adultAge: HUMAN_ADULT_TICKS,
+      // mating: both must be adult, have at least minFood, and be off cooldown; each then pays cost food
+      mate: { minFood: HUMAN_MATE_MIN_FOOD, cost: HUMAN_BIRTH_COST, cooldown: HUMAN_BIRTH_COOLDOWN, childFood: HUMAN_CHILD_FOOD }, lifespan: [sim.humanLifespanMin, sim.humanLifespanMin + sim.humanLifespanSpread - 1],
     },
-    self: { id: actor.id, x: actor.x, y: actor.y, facing: [...actor.facing], age: sim.tick - actor.born, food: actor.food, foodMax: FOOD_MAX, inventory },
+    self: { id: actor.id, x: actor.x, y: actor.y, facing: [...actor.facing], age: sim.tick - actor.born, parents: actor.parents ? [...actor.parents] : null,
+      children: actor.children.filter((id) => { const c = sim.byId(id); return c && !c.removed; }), // your living children
+      food: actor.food, foodMax: FOOD_MAX, inventory },
     view: { radius: R, x0: vis.x0, y0: vis.y0, tiles, grass, entities },
     // Speech is private to the people in it. events: one-shot notices since your last observation.
     // proposals: the standing state (present until resolved), so a brain that was busy can still see it.

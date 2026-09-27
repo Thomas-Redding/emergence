@@ -1,6 +1,6 @@
 import { getAtlas, hash2, TUNIC_COUNT } from "./sprites.js";
 import { Animator } from "./animator.js";
-import { DEER_FAWN_TICKS } from "../sim/constants.js";
+import { DEER_FAWN_TICKS, HUMAN_ADULT_TICKS } from "../sim/constants.js";
 
 // Lush ground colours (three variants for texture) and the bare colour a tile fades to when grazed out.
 const LUSH = { ".": [[143, 191, 90], [139, 186, 86], [148, 195, 95]], ",": [[76, 138, 58], [71, 132, 53], [81, 143, 63]] };
@@ -191,8 +191,21 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
     if (e.kind === "human") animator.setAction(st, e.lastResult, time);
     const [sx, sy] = pos(ix, iy);
     if (e.id === opts.selectedId) selected = [sx, sy];
-    const adult = e.adult ?? e.age >= DEER_FAWN_TICKS; // fawns are drawn smaller
-    drawables.push({ key: iy + 0.3, fn: () => (e.kind === "human" ? drawHuman(e, st, sx, sy) : drawDeer(st, sx, sy, adult)) });
+    // Fawns and children are drawn smaller. (Others' `adult` is in the observation; your own comes from your age.)
+    const adult = e.kind === "deer"
+      ? e.adult ?? e.age >= DEER_FAWN_TICKS
+      : e.adult ?? (e.age !== undefined ? e.age >= HUMAN_ADULT_TICKS : sim.tick - e.born >= HUMAN_ADULT_TICKS);
+    drawables.push({ key: iy + 0.3, fn: () => {
+      if (e.kind === "deer") return drawDeer(st, sx, sy, adult);
+      if (adult) return drawHuman(e, st, sx, sy);
+      const feet = sy + 0.3 * z; // shrink everything about the feet
+      ctx.save();
+      ctx.translate(sx, feet);
+      ctx.scale(0.7, 0.7);
+      ctx.translate(-sx, -feet);
+      drawHuman(e, st, sx, sy);
+      ctx.restore();
+    } });
   }
   drawables.sort((a, b) => a.key - b.key);
   for (const d of drawables) d.fn();

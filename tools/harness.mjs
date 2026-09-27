@@ -83,11 +83,11 @@ export function runOne(config, seed) {
   const pos = layoutPositions(npcs, layout, s.world.width, s.world.height);
   const actors = pos.map(([x, y], i) => ({ brain: brains[i % brains.length].name, actor: s.addActor(brains[i % brains.length].fn, x, y) }));
 
-  const herd = [];
+  const herd = [], people = [];
   const deerCount = () => { let n = 0; for (const e of s.entities) if (e.kind === "deer" && !e.removed) n++; return n; };
   for (let t = 1; t <= ticks; t++) {
     s.step();
-    if (t % sampleEvery === 0) herd.push(deerCount());
+    if (t % sampleEvery === 0) { herd.push(deerCount()); people.push(s.humanCount()); }
   }
   const herdEnd = deerCount();
   let grass = 0, cap = 0;
@@ -104,6 +104,7 @@ export function runOne(config, seed) {
   return {
     seed, ticks, npcs: npcRuns,
     herd: { end: herdEnd, samples: herd },
+    humans: { end: s.humanCount(), samples: people }, // everyone alive, children included
     grassPct: cap ? (100 * grass) / cap : 0,
     stats: { ...s.stats },
     ms: performance.now() - t0,
@@ -137,6 +138,12 @@ export function scalars(run, brain = null) {
     herdMin: samples.length ? Math.min(...samples) : null,
     herdExtinct: samples.length ? (samples.some((n) => n === 0) || run.herd.end === 0 ? 1 : 0) : null,
     grassPct: run.grassPct,
+    // the human population as a whole (founders plus everyone born): only interesting once brains have children
+    humansEnd: run.humans ? run.humans.end : null,
+    humansPeak: run.humans && run.humans.samples.length ? Math.max(run.humans.end, ...run.humans.samples) : null,
+    births: run.stats.births ?? 0,
+    childStarved: run.stats.childStarved ?? 0,
+    grewUp: run.stats.grewUp ?? 0,
     msPer1000: (1000 * run.ms) / run.ticks,
   };
 }
@@ -151,6 +158,12 @@ export const METRICS = [
   { key: "herdMin", label: "deer (lowest sample)", kind: "int" },
   { key: "herdExtinct", label: "runs where deer died out", kind: "pct", better: "lower" },
   { key: "grassPct", label: "grass left", kind: "pct100" },
+  // Shown only in runs where anyone had a child:
+  { key: "births", label: "children born", kind: "num", optional: true },
+  { key: "childStarved", label: "children who starved", kind: "num", optional: true },
+  { key: "grewUp", label: "children who grew up", kind: "num", optional: true },
+  { key: "humansEnd", label: "people alive at end", kind: "int", optional: true },
+  { key: "humansPeak", label: "most people at once", kind: "int", optional: true },
   { key: "msPer1000", label: "cost (ms / 1000 ticks)", kind: "int", noisy: true },
 ];
 
@@ -232,6 +245,7 @@ export function formatSummary(result, { brain = null, baseline = null } = {}) {
   lines.push(`${"".padEnd(28)} ${pad("mean", 7)} ${pad("+-se", 6)} ${pad("median", 7)} ${pad("min", 6)} ${pad("max", 6)}${baseline ? "   vs baseline (paired)" : ""}`);
   for (const m of METRICS) {
     const s = sum[m.key];
+    if (m.optional && !(sum.births.max > 0)) continue; // no one had a child: don't clutter the report
     if (brain && (m.key.startsWith("herd") || m.key === "grassPct" || m.key === "msPer1000")) continue; // world-wide, not per brain
     let row = `${m.label.padEnd(28)} ${pad(fmt(m.kind, s.mean), 7)} ${pad(s.n > 1 ? fmt(m.kind, s.se) : "-", 6)} ${pad(fmt(m.kind, s.median), 7)} ${pad(fmt(m.kind, s.min), 6)} ${pad(fmt(m.kind, s.max), 6)}`;
     if (baseline && !m.noisy) {
@@ -258,6 +272,7 @@ export function formatComparison(results) {
   lines.push(`${"".padEnd(28)} ${names.map((n) => pad(n.slice(0, 16), 16)).join(" ")}   difference vs ${names[0]} (paired, +-se)`);
   const sums = results.map((r) => summarize(r.runs));
   for (const m of METRICS) {
+    if (m.optional && !sums.some((x) => x.births.max > 0)) continue;
     const cells = sums.map((s) => pad(`${fmt(m.kind, s[m.key].mean)}${s[m.key].n > 1 ? " +-" + fmt(m.kind, s[m.key].se) : ""}`, 16));
     let diffs = "";
     if (!m.noisy) {

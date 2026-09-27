@@ -121,7 +121,7 @@ test("baselines round-trip, and a change against them is detected", () => {
   const runs = [1, 2, 3].map((s) => fake(s, { alive: true, life: 1000, meals: 2 + s }));
   const result = { config: cfg, runs };
   const saved = JSON.parse(JSON.stringify(toBaseline(result))); // survives being written to disk
-  for (const m of METRICS) if (!m.noisy) assert.equal(compareToBaseline(result, saved, m.key).mean, 0, m.key);
+  for (const m of METRICS) if (!m.noisy && !m.optional) assert.equal(compareToBaseline(result, saved, m.key).mean, 0, m.key);
   const better = { config: cfg, runs: runs.map((r) => fake(r.seed, { alive: true, life: 1000, meals: r.npcs[0].meals + 2 })) };
   const c = compareToBaseline(better, saved, "mealsPer1000");
   assert.equal(c.mean, 2, "two more meals in 1000 ticks alive is +2 per 1000");
@@ -136,7 +136,8 @@ test("reports render without error and mention what they measure", async () => {
   const cfg = { seeds: [1, 2], ticks: 2500, npcs: 1 };
   const one = runScenario({ ...cfg, brains: [brains[0]] });
   const text = formatSummary(one, { baseline: toBaseline(one) });
-  for (const m of METRICS) assert.ok(text.includes(m.label), `missing "${m.label}"`);
+  for (const m of METRICS) if (!m.optional) assert.ok(text.includes(m.label), `missing "${m.label}"`);
+  assert.ok(!text.includes("children born"), "the birth rows stay out of the way when nobody had a child");
   assert.match(text, /vs baseline/);
   const two = runScenario({ ...cfg, brains: [brains[1]] });
   const cmp = formatComparison([one, two]);
@@ -147,6 +148,16 @@ test("reports render without error and mention what they measure", async () => {
   assert.deepEqual(worstSeeds(two).map((w) => w.slice(0, 7)), ["seed 1:", "seed 2:"], "the idle brain starved on both seeds, so both are listed");
   const s = summarize(one.runs);
   assert.equal(s.survival.n, 2);
+});
+
+test("birth rows appear once anyone has had a child, and count the whole population", () => {
+  const withBirths = (seed) => ({ ...fake(seed, { alive: true, life: 1000, meals: 2 }), stats: { births: 3, childStarved: 1, grewUp: 2 }, humans: { end: 6, samples: [4, 7, 6] } });
+  const s = scalars(withBirths(1));
+  assert.deepEqual([s.births, s.childStarved, s.grewUp, s.humansEnd, s.humansPeak], [3, 1, 2, 6, 7]);
+  const result = { config: { brains: [{ name: "x" }], npcs: 1, ticks: 1000, seeds: [1, 2] }, runs: [withBirths(1), withBirths(2)] };
+  const text = formatSummary(result);
+  for (const label of ["children born", "children who starved", "children who grew up", "people alive at end", "most people at once"]) assert.ok(text.includes(label), label);
+  assert.match(text, /children born\s+3\.00/);
 });
 
 test("the command line works end to end", () => {

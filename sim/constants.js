@@ -90,3 +90,10 @@ export const TALK_RANGE = 4; // you can only propose to, and answer, someone wit
 export const PROPOSAL_TICKS = 100; // an unanswered proposal expires after this long
 export const DECLINE_COOLDOWN = 200; // after "no", the same person can't ask the same person again for this long
 export const INBOX_MAX = 32; // events queued for a brain that never reads them are dropped, oldest first
+
+// ---- Births (a "mate" proposal that is accepted; tuned later with the harness) ----
+export const HUMAN_MATE_MIN_FOOD = 600; // both parents must be at least this well fed to agree to mate
+export const HUMAN_BIRTH_COST = 250; // food each parent spends (half a meal)
+export const HUMAN_BIRTH_COOLDOWN = 4000; // before either parent can have another child
+export const HUMAN_CHILD_FOOD = 500; // a newborn starts with this much: it starves in ~1000 ticks unless fed
+export const HUMAN_MAX = 40; // safety cap on the number of living people

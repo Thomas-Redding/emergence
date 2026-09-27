@@ -81,6 +81,7 @@ const HANDLERS = {
   },
 
   stab(sim, a, { target }) {
+    if (sim.tick - a.born < C.HUMAN_ADULT_TICKS) return fail("too_young"); // children are too weak to hunt
     if (![...sim.entities].some((e) => e.holder === a.id && e.kind === "spear" && !e.removed)) return fail("need_spear");
     const d = sim.byId(target);
     if (!d || d.removed || d.kind !== "deer" || dist2(d, a) > C.REACH.stab * C.REACH.stab) return fail("no_target_in_reach");

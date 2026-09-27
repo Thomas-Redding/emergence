@@ -5,6 +5,11 @@ import { applyAction } from "./actions.js";
 import { canSeePoint } from "./vision.js";
 import * as C from "./constants.js";
 
+// What a child does if neither parent has a brain that can be handed down: wait (and starve unless fed).
+function* idleBrain(obs) {
+  for (;;) obs = yield { type: "wait" };
+}
+
 const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
 export class Sim {
@@ -12,11 +17,12 @@ export class Sim {
   // each tile's grass capacity present at tick 0. Both only shape the opening: the herd then finds its own size.
   // humanLifespanMin/Spread: the range old-age death is rolled from (overridable, e.g. tiny in tests).
   constructor({ seed, width = 96, height = 96, startingDeer = null, startingGrass = C.GRASS_START_FRACTION,
-                humanLifespanMin = C.HUMAN_LIFESPAN_MIN, humanLifespanSpread = C.HUMAN_LIFESPAN_SPREAD }) {
+                humanLifespanMin = C.HUMAN_LIFESPAN_MIN, humanLifespanSpread = C.HUMAN_LIFESPAN_SPREAD, humanMax = C.HUMAN_MAX }) {
     this.seed = seed;
     this.tick = 0;
     this.humanLifespanMin = humanLifespanMin;
     this.humanLifespanSpread = humanLifespanSpread;
+    this.humanMax = humanMax;
     this.world = generateWorld(seed, width, height);
     this.rng = makeRng(deriveSeed(seed, "sim"));
     this.entities = []; // ascending id order; removal is deferred to end of step
@@ -26,15 +32,15 @@ export class Sim {
     this.humanIds = []; // actors added with { record: true }: the ones a person (or a replay) drives
     this.inputLog = []; // [{ tick, actor, action }] of every non-wait action by a recorded brain:
     //                     with the seed and the setup, everything needed to replay a session
-    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deathsStarved: 0, deathsOld: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
+    this.stats = { kills: 0, meals: 0, fires: 0, deaths: 0, deathsStarved: 0, deathsOld: 0, births: 0, grewUp: 0, childStarved: 0, deerBorn: 0, deerStarved: 0, deerOld: 0 };
     // Speech: pending proposals, and who is on a "no" cooldown. (Both are world state, so both are hashed.)
     this.proposals = []; // [{ id, kind, from, to, createdTick, expires }] in creation order
     this.nextProposalId = 1;
     this.declineUntil = new Map(); // "from:to" -> tick before which `from` can't ask `to` again
     this.speechQueue = []; // speech from this tick's actions, resolved after everyone has acted
     // What each kind of proposal does when accepted. accept(sim, proposer, recipient) -> { ok, reason? }.
-    // (Slice 1 of births: "mate" exists but does nothing yet. Tests register their own kinds here.)
-    this.proposalKinds = new Map([["mate", { accept: () => ({ ok: false, reason: "not_implemented" }) }]]);
+    // (Tests can register their own kinds here.)
+    this.proposalKinds = new Map([["mate", { accept: (sim, proposer, recipient) => sim.mate(proposer, recipient) }]]);
     this.grass = Uint8Array.from(this.world.grassCap, (c) => Math.round(c * startingGrass));
     const herd = startingDeer ?? Math.floor((width * height * C.DEER_START_PER_1000_TILES) / 1000);
     for (let i = 0; i < herd; i++) this.spawnDeerRandom();
@@ -112,16 +118,63 @@ export class Sim {
   // age: how old they are at the start (default: a fresh adult). lifespan: overrides the rolled old-age
   // death (a test hook); normally it is rolled from a per-person stream so that adding people never
   // perturbs the random draws that drive the world and the deer.
-  addActor(brainFn, x, y, { record = false, age = C.HUMAN_ADULT_TICKS, lifespan = null } = {}) {
-    [x, y] = this.findFreeNear(x, y);
+  // Births use the rest: `at` places someone at an exact position (instead of the nearest free tile to
+  // (x, y)), `food` sets their starting food, and `parents` / `generation` record who they came from.
+  addActor(brainFn, x, y, { record = false, age = C.HUMAN_ADULT_TICKS, lifespan = null, at = null, food = C.FOOD_START, parents = null, generation = 0 } = {}) {
+    if (!at) { [x, y] = this.findFreeNear(x, y); at = [x + 0.5, y + 0.5]; }
     // tally: what this actor has achieved (for benchmarking brains against each other). It only counts
     // things that already happened in the world, so it isn't part of the state hash.
-    const a = this.spawn("human", x + 0.5, y + 0.5, { facing: [0, 1], food: C.FOOD_START, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 }, inbox: [] });
+    const a = this.spawn("human", at[0], at[1], {
+      facing: [0, 1], food, noisy: false, lastResult: { ok: true }, tally: { kills: 0, meals: 0, fires: 0 }, inbox: [],
+      parents, children: [], generation, birthCooldown: 0,
+    });
     a.born = this.tick - age; // age is this.tick - born
     a.lifespan = lifespan ?? this.humanLifespanMin + makeRng(deriveSeed(this.seed, "life" + a.id)).int(this.humanLifespanSpread);
-    this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record });
+    // inheritable: a brain driven from outside (a person at the keyboard, a replay) can't be handed down.
+    this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record, inheritable: !record });
     if (record) this.humanIds.push(a.id);
     return a;
+  }
+
+  humanCount() {
+    let n = 0;
+    for (const e of this.entities) if (e.kind === "human" && !e.removed) n++;
+    return n;
+  }
+
+  // A "mate" proposal was accepted. Both must be adult, fed, and off cooldown; if so each pays a cost and a
+  // child is born next to them, running one parent's brain. Returns { ok, reason? } (reason names who failed).
+  mate(a, b) {
+    const problem = (p, who) => {
+      if (this.tick - p.born < C.HUMAN_ADULT_TICKS) return `${who}_child`;
+      if (p.food < C.HUMAN_MATE_MIN_FOOD) return `${who}_hungry`;
+      if (p.birthCooldown > 0) return `${who}_cooldown`;
+      return null;
+    };
+    const why = problem(a, "proposer") ?? problem(b, "recipient");
+    if (why) return { ok: false, reason: why };
+    if (this.humanCount() >= this.humanMax) return { ok: false, reason: "population_cap" };
+
+    a.food -= C.HUMAN_BIRTH_COST;
+    b.food -= C.HUMAN_BIRTH_COST;
+    a.birthCooldown = b.birthCooldown = C.HUMAN_BIRTH_COOLDOWN;
+
+    // The child runs a parent's brain. Among the parents whose brain can be handed down, pick one at
+    // random (from the seeded stream); if neither can (people at the keyboard), the child just waits.
+    const heirs = [a, b].filter((p) => this.brains.get(p.id).inheritable);
+    const from = heirs.length === 2 ? heirs[this.rng.chance(0.5) ? 0 : 1] : heirs[0];
+    const brainFn = from ? this.brains.get(from.id).fn : idleBrain;
+
+    const [ux, uy] = this.rng.unit();
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const at = this.canStand(mx + ux * 0.8, my + uy * 0.8) ? [mx + ux * 0.8, my + uy * 0.8] : [a.x, a.y];
+    const child = this.addActor(brainFn, 0, 0, { at, age: 0, food: C.HUMAN_CHILD_FOOD, parents: [a.id, b.id], generation: Math.max(a.generation, b.generation) + 1 });
+    a.children.push(child.id);
+    b.children.push(child.id);
+    this.stats.births++;
+    this.emit(a, { type: "birth", child: child.id, with: b.id });
+    this.emit(b, { type: "birth", child: child.id, with: a.id });
+    return { ok: true };
   }
 
   // Swap who drives an actor (e.g. hand a replayed actor back to a live player).
@@ -167,6 +220,8 @@ export class Sim {
 
   stepActor(a) {
     a.noisy = false;
+    if (a.birthCooldown > 0) a.birthCooldown--;
+    if (a.parents && this.tick - a.born === C.HUMAN_ADULT_TICKS) this.stats.grewUp++; // a child reaches adulthood
     const action = this.think(a);
     a.lastResult = applyAction(this, a, action);
     if (action && typeof action === "object" && (action.propose !== undefined || action.respond !== undefined)) {
@@ -182,7 +237,10 @@ export class Sim {
     a.diedAt = this.tick;
     a.cause = cause; // "starvation" | "old_age" (also stays on the object, for whoever holds a reference)
     this.stats.deaths++;
-    if (cause === "starvation") this.stats.deathsStarved++;
+    if (cause === "starvation") {
+      this.stats.deathsStarved++;
+      if (a.parents && this.tick - a.born < C.HUMAN_ADULT_TICKS) this.stats.childStarved++;
+    }
     else this.stats.deathsOld++;
     for (const e of this.entities) if (e.holder === a.id) { e.holder = null; e.x = a.x; e.y = a.y; }
     for (const p of this.proposals.filter((q) => q.from === a.id || q.to === a.id)) this.closeProposal(p, "gone");
