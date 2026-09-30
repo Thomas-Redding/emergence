@@ -23,7 +23,7 @@ export function hudHtml(model, { title, hint }) {
   }
   h += '<div class="main">';
   const f = model.food;
-  h += `<div class="card food ${f.level}"><div class="who">${esc(title)} <span class="age">age ${model.age.text}${model.age.adult ? "" : " · child"}</span></div><div>Food ${f.value} / ${f.max}${f.level === "critical" ? " · starving!" : ""}</div>${bar(f.frac, f.level)}</div>`;
+  h += `<div class="card food ${f.level}"><div class="who">${esc(title)} <span class="age">${esc(model.sex)} · age ${model.age.text}${model.age.adult ? "" : " · child"}</span></div><div>Food ${f.value} / ${f.max}${f.level === "critical" ? " · starving!" : ""}</div>${bar(f.frac, f.level)}</div>`;
   h += '<div class="slots">';
   for (const s of model.slots) {
     const tip = `${s.name}${s.count > 1 ? " ×" + s.count : ""} — ${s.detail}`;

@@ -6,10 +6,10 @@ import { actionPlans, ACTION_KEYS } from "../ui/controls.js";
 import { buildHud } from "../ui/inventory.js";
 
 const REACH = { pickup: 1, stab: 1.2, fire: 1.5, give: 1.5, talk: 4, stabFacingCos: 0.5 };
-const mock = (inv, { ents = [], food = 800, facing = [0, 1], children = [], outgoing = null, tick = 0 } = {}) => ({
+const mock = (inv, { ents = [], food = 800, facing = [0, 1], children = [], outgoing = null, tick = 0, sex = "male" } = {}) => ({
   tick,
   reach: REACH,
-  self: { id: 1, x: 10, y: 10, facing, food, foodMax: 1000, inventory: inv, children },
+  self: { id: 1, x: 10, y: 10, facing, food, foodMax: 1000, inventory: inv, children, sex },
   view: { entities: ents },
   proposals: { incoming: [], outgoing },
 });
@@ -102,8 +102,8 @@ test("the HUD's action row matches the plans", () => {
 });
 
 test("propose (mate): needs an adult within talking range, and only one outstanding at a time", () => {
-  const adult = { id: 8, kind: "human", x: 10.5, y: 12, adult: true };
-  const child = { id: 9, kind: "human", x: 10.5, y: 12, adult: false };
+  const adult = { id: 8, kind: "human", x: 10.5, y: 12, adult: true, sex: "female" };
+  const child = { id: 9, kind: "human", x: 10.5, y: 12, adult: false, sex: "female" };
   let p = actionPlans(mock([], {}));
   assert.match(p.m.why, /talking range/);
   p = actionPlans(mock([], { ents: [child] }));

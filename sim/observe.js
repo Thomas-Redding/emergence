@@ -4,7 +4,7 @@ import { VIEW_RADIUS, FOOD_MAX, REACH, STAB_FACING_COS, DEER_FAWN_TICKS, MEAT_FO
 import { FOREST } from "./worldgen.js";
 import { visionGrid, canSeePoint } from "./vision.js";
 
-const PUBLIC_FIELDS = ["sharpness", "cook", "lit", "progress", "fuel"];
+const PUBLIC_FIELDS = ["sharpness", "cook", "lit", "progress", "fuel", "sex"];
 
 // Fresh plain-data copy of an entity: NPC code can never mutate sim state through it.
 function publicView(e, tick) {
@@ -61,7 +61,7 @@ export function observe(sim, actor) {
       // mating: both must be adult, have at least minFood, and be off cooldown; each then pays cost food
       mate: { minFood: HUMAN_MATE_MIN_FOOD, cost: HUMAN_BIRTH_COST, cooldown: HUMAN_BIRTH_COOLDOWN, childFood: HUMAN_CHILD_FOOD }, lifespan: [sim.humanLifespanMin, sim.humanLifespanMin + sim.humanLifespanSpread - 1],
     },
-    self: { id: actor.id, x: actor.x, y: actor.y, facing: [...actor.facing], age: sim.tick - actor.born, parents: actor.parents ? [...actor.parents] : null,
+    self: { id: actor.id, x: actor.x, y: actor.y, facing: [...actor.facing], age: sim.tick - actor.born, sex: actor.sex, parents: actor.parents ? [...actor.parents] : null,
       children: actor.children.filter((id) => { const c = sim.byId(id); return c && !c.removed; }), // your living children
       food: actor.food, foodMax: FOOD_MAX, inventory },
     view: { radius: R, x0: vis.x0, y0: vis.y0, tiles, grass, entities },

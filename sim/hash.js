@@ -20,6 +20,7 @@ export function hashState(sim) {
     mix(e.holder ?? -1);
     for (const f of ["sharpness", "cook", "progress", "fuel", "food", "fleeTicks", "moveTicks", "energy", "age", "lifespan", "breedCooldown", "born", "birthCooldown", "generation"]) mix(e[f] ?? 0);
     mix(e.grazing ? 1 : 0);
+    mix(e.sex === "male" ? 1 : e.sex === "female" ? 2 : 0);
     if (e.target) { mix(e.target[0]); mix(e.target[1]); }
     mix(e.lit ? 1 : 0);
     if (e.parents) for (const id of e.parents) mix(id);

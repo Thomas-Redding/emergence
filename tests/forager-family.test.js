@@ -22,7 +22,7 @@ const stock = (s, p, { spear = true, meals = 2, food = 1000 } = {}) => {
 };
 const couple = ({ seed = 1, brain = foragerFamily, apart = 3 } = {}) => {
   const s = meadow(seed);
-  const a = s.addActor(brain, 40, 40), b = s.addActor(brain, 40, 40 + apart);
+  const a = s.addActor(brain, 40, 40, { sex: "male" }), b = s.addActor(brain, 40, 40 + apart, { sex: "female" });
   stock(s, a); stock(s, b);
   return { s, a, b };
 };
@@ -120,7 +120,7 @@ test("a child takes over its parent's whole life at adulthood: it is a forager l
 test("someone with a growing child keeps a spare meal for it when deciding whether to hunt", () => {
   const firstAction = (brain, { withChild }) => {
     const s = meadow();
-    const a = s.addActor(brain, 40, 40), b = s.addActor(brain, 41, 40);
+    const a = s.addActor(brain, 40, 40, { sex: "male" }), b = s.addActor(brain, 41, 40, { sex: "female" });
     stock(s, a, { meals: 1, food: 900 }); // 900 + 500 = 1400 energy on hand: above the plain 2-meal reserve (1000)
     stock(s, b, { meals: 1, food: 900 });
     if (withChild) { s.run(1); s.tick -= 1; s.mate(a, b); s.tick += 1; } // (a child, born the way a real birth happens)
@@ -174,10 +174,10 @@ test("it turns down a proposal it doesn't want, saying so, and never freezes wai
 
 test("it accepts one it does want, without stopping what it was doing", () => {
   const s = meadow();
-  const a = s.addActor(foragerFamily, 40, 40);
+  const a = s.addActor(foragerFamily, 40, 40, { sex: "male" });
   const asker = s.addActor(function* (obs) {
     for (;;) obs = yield obs.tick === 0 ? { type: "wait", propose: { to: a.id, kind: "mate" } } : { type: "wait" };
-  }, 40, 42);
+  }, 40, 42, { sex: "female" });
   asker.facing = [0, -1];
   stock(s, a); stock(s, asker);
   s.run(10);

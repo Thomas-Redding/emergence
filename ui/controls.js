@@ -42,6 +42,7 @@ export const MATE_FAIL_TEXT = {
   proposer_cooldown: "you just had a child",
   recipient_cooldown: "they just had a child",
   population_cap: "the world is full",
+  same_sex: "the two of you can't have a child together",
   not_implemented: "that doesn't do anything yet",
 };
 
@@ -89,15 +90,15 @@ export function actionPlans(obs) {
   const cooked = mine("cooked_meat")[0];
   plans.g = cooked ? yes("Eat", { type: "eat", item: cooked.id }) : no("Eat", "you have no cooked meat");
 
-  // Propose (mate). Only the basic, self-evident conditions are checked here (an adult target within
-  // talking range, and not already waiting on an answer): a proposal that clears these can still be
-  // declined, or accepted and then turn out invalid (too young, too hungry, on cooldown, ...) — that's
-  // reported back as an event, not predicted here, since some of it (e.g. a recent "no") isn't visible
-  // to the player at all.
+  // Propose (mate). Only the basic, self-evident conditions are checked here (an adult of the opposite
+  // sex within talking range, and not already waiting on an answer): a proposal that clears these can
+  // still be declined, or accepted and then turn out invalid (too young, too hungry, on cooldown, ...) —
+  // that's reported back as an event, not predicted here, since some of it (e.g. a recent "no") isn't
+  // visible to the player at all.
   const outgoing = obs.proposals.outgoing;
-  const partner = near((e) => e.kind === "human" && e.adult, R.talk);
+  const partner = near((e) => e.kind === "human" && e.adult && e.sex !== me.sex, R.talk);
   if (outgoing) plans.m = no("Propose", `waiting for an answer (${Math.max(0, outgoing.expires - obs.tick)} ticks left)`);
-  else if (!partner) plans.m = no("Propose", "no adult within talking range");
+  else if (!partner) plans.m = no("Propose", "no eligible partner within talking range");
   else plans.m = yes(`Propose to ${humanLabel(partner)}`, { type: "wait", propose: { to: partner.id, kind: "mate" } });
 
   // Give: prefer feeding your own child if one is in reach, otherwise hand something to whoever is

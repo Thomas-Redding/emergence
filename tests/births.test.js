@@ -13,6 +13,9 @@ const ofType = (obs, type) => obs.events.filter((e) => e.type === type);
 
 // Scripted people (script[tick] = action; every observation recorded in logs[name][tick]). A person can be
 // given a `brain` instead, to test inheritance, and `age` / `food` / `record` as needed.
+// A person named "a" or "b" defaults to opposite sexes (most of this file's tests are about a couple
+// mating), overridable with an explicit `sex` in their spec; anyone else defaults to random, as usual.
+const DEFAULT_SEX = { a: "male", b: "female" };
 function scene(people, simOpts = {}, seed = 1) {
   const s = new Sim({ seed, ...simOpts });
   s.world.treeAt.fill(0);
@@ -20,7 +23,7 @@ function scene(people, simOpts = {}, seed = 1) {
   s.byIdMap.clear();
   const ids = {}, logs = {}, actors = {};
   for (const [name, spec] of Object.entries(people)) {
-    const { at, script = {}, age, food, brain, record } = spec;
+    const { at, script = {}, age, food, brain, record, sex } = spec;
     logs[name] = [];
     const fn = brain ?? function* (obs) {
       for (;;) {
@@ -29,7 +32,9 @@ function scene(people, simOpts = {}, seed = 1) {
         obs = yield act ?? { type: "wait" };
       }
     };
-    actors[name] = s.addActor(fn, at[0], at[1], { ...(age === undefined ? {} : { age }), ...(record ? { record } : {}) });
+    actors[name] = s.addActor(fn, at[0], at[1], {
+      ...(age === undefined ? {} : { age }), ...(record ? { record } : {}), sex: sex ?? DEFAULT_SEX[name] ?? null,
+    });
     if (food !== undefined) actors[name].food = food;
     ids[name] = actors[name].id;
   }
@@ -232,6 +237,7 @@ test("generations count up the family line", () => {
   s.run(3);
   const [kid] = children(s);
   kid.born = s.tick - C.HUMAN_ADULT_TICKS; // grown up
+  kid.sex = "male"; // opposite of b ("female"), so this test is about generations, not sex compatibility
   kid.food = 1000;
   const grandchild = (() => { assert.deepEqual(s.mate(kid, actors.b), { ok: false, reason: "recipient_cooldown" }, "b is still on cooldown"); actors.b.birthCooldown = 0; assert.deepEqual(s.mate(kid, actors.b), { ok: true }); return children(s).find((c) => c.generation === 2); })();
   assert.ok(grandchild, "generation 1 + generation 0 -> generation 2");

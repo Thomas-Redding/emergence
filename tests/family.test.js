@@ -40,7 +40,7 @@ test("moveToward gives one step toward a point, or null when there is nothing to
 test("withFamily: an adult learns of a birth, and its estimate of the child's food tracks the truth", () => {
   const s = meadow();
   const logA = [], logB = [];
-  const a = s.addActor(withFamily(scripted(logA)), 40, 40), b = s.addActor(withFamily(scripted(logB)), 40, 42);
+  const a = s.addActor(withFamily(scripted(logA)), 40, 40, { sex: "male" }), b = s.addActor(withFamily(scripted(logB)), 40, 42, { sex: "female" });
   s.run(3);
   assert.deepEqual(logA[2].family.kids, [], "no children yet");
   assert.deepEqual(mateAtEndOfTick(s, a, b), { ok: true });
@@ -69,7 +69,7 @@ test("withFamily: a gift of cooked meat raises the estimate by a meal; the child
     const kid = obs.family.kids[0];
     return handOver && meal && kid ? { type: "give", item: meal.id, to: kid.id } : null;
   }));
-  const a = s.addActor(withChildhood(parentBrain(logA)), 40, 40), b = s.addActor(withChildhood(parentBrain([])), 40, 42);
+  const a = s.addActor(withChildhood(parentBrain(logA)), 40, 40, { sex: "male" }), b = s.addActor(withChildhood(parentBrain([])), 40, 42, { sex: "female" });
   mateAtEndOfTick(s, a, b);
   const kid = s.byId(a.children[0]);
   s.run(2);
@@ -92,7 +92,7 @@ test("withFamily: a gift of cooked meat raises the estimate by a meal; the child
 test("withFamily: children stop being dependent at adulthood, and are forgotten if they die", () => {
   const s = meadow();
   const logA = [];
-  const a = s.addActor(withFamily(scripted(logA)), 40, 40), b = s.addActor(withFamily(scripted([])), 40, 42);
+  const a = s.addActor(withFamily(scripted(logA)), 40, 40, { sex: "male" }), b = s.addActor(withFamily(scripted([])), 40, 42, { sex: "female" });
   mateAtEndOfTick(s, a, b);
   const kid = s.byId(a.children[0]);
   s.run(2);
@@ -132,8 +132,8 @@ test("withFamily: a reply rides along on whatever action the brain takes, unless
   const answer = (obs) => { const inc = obs.proposals.incoming[0]; return inc ? { to: inc.from, accept: true } : null; };
   const build = (innerAct) => {
     const s = meadow();
-    const a = s.addActor(withFamily(scripted([], innerAct), { reply: answer }), 40, 40);
-    const b = s.addActor(scripted([], (obs) => (obs.tick === 0 ? { type: "wait", propose: { to: a.id, kind: "mate" } } : null)), 40, 42);
+    const a = s.addActor(withFamily(scripted([], innerAct), { reply: answer }), 40, 40, { sex: "male" });
+    const b = s.addActor(scripted([], (obs) => (obs.tick === 0 ? { type: "wait", propose: { to: a.id, kind: "mate" } } : null)), 40, 42, { sex: "female" });
     b.facing = [0, -1]; // face a
     return { s, a, b };
   };
@@ -156,7 +156,7 @@ function family() {
   const s = meadow();
   const parentLog = [], grownLog = [];
   const brain = withChildhood(function* (obs) { for (;;) { grownLog.push(obs); obs = yield { type: "wait" }; } });
-  const a = s.addActor(brain, 40, 40), b = s.addActor(brain, 40, 41);
+  const a = s.addActor(brain, 40, 40, { sex: "male" }), b = s.addActor(brain, 40, 41, { sex: "female" });
   mateAtEndOfTick(s, a, b);
   const kid = s.byId(a.children[0]);
   return { s, a, b, kid, grownLog, parentLog };

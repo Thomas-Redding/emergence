@@ -2,16 +2,14 @@ import { getAtlas, hash2, TUNIC_COUNT } from "./sprites.js";
 import { Animator } from "./animator.js";
 import { DEER_FAWN_TICKS, HUMAN_ADULT_TICKS } from "../sim/constants.js";
 
-// Lush ground colours (three variants for texture) and the bare colour a tile fades to when grazed out.
-const LUSH = { ".": [[143, 191, 90], [139, 186, 86], [148, 195, 95]], ",": [[76, 138, 58], [71, 132, 53], [81, 143, 63]] };
-const BARE = { ".": [186, 166, 106], ",": [112, 118, 70] };
-const groundColor = (kind, variant, frac) => {
-  // Perceived lushness isn't linear in grass amount: a tile with a fifth of its grass still reads as green.
-  // (sqrt keeps thin grass looking green and only turns a tile bare as it is almost eaten out.)
-  const a = LUSH[kind][variant], b = BARE[kind], t = 1 - Math.sqrt(Math.max(0, Math.min(1, frac)));
-  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
-};
+// Ground colours (three variants per terrain, for texture only -- grass amount is shown by tufts, not colour).
+const GROUND = { ".": [[143, 191, 90], [139, 186, 86], [148, 195, 95]], ",": [[76, 138, 58], [71, 132, 53], [81, 143, 63]] };
+const groundColor = (kind, variant) => { const [r, g, b] = GROUND[kind][variant]; return `rgb(${r},${g},${b})`; };
 const GROUND_ITEMS = new Set(["fire", "stick", "spear", "raw_meat", "cooked_meat"]);
+// How many grass tufts a tile shows, from its grass fraction (0..1): a small number of discrete steps
+// instead of a continuous colour fade, so deer visibly eat individual tufts as a meadow is grazed.
+const GRASS_TUFT_TIERS = 4;
+const grassTuftCount = (frac) => (frac <= 0 ? 0 : Math.max(1, Math.round(frac * GRASS_TUFT_TIERS)));
 
 const animator = new Animator();
 let frameCount = 0;
@@ -105,19 +103,27 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
       const hh = hash2(x, y);
       const ground = c === "." ? "." : ",";
       // How much grass is there? Straight from the sim in god view; from the character's observation
-      // when the tile is in view; remembered tiles just show a neutral-lush ground.
-      let frac = 0.8;
-      if (!memory) frac = sim.world.grassCap[y * width + x] ? sim.grass[y * width + x] / sim.world.grassCap[y * width + x] : 1;
-      else if (live) {
+      // when the tile is in view. A tile with no meadow (or a remembered one -- memory doesn't track
+      // grass amount) shows no tufts at all.
+      let tuftCount = 0;
+      if (!memory) {
+        const cap = sim.world.grassCap[y * width + x];
+        if (cap) tuftCount = grassTuftCount(sim.grass[y * width + x] / cap);
+      } else if (live) {
         const gc = obs.view.grass[y - obs.view.y0][x - obs.view.x0];
-        frac = gc >= "0" && gc <= "9" ? Number(gc) / 9 : 1;
+        if (gc >= "0" && gc <= "9") tuftCount = grassTuftCount(Number(gc) / 9);
       }
-      ctx.fillStyle = groundColor(ground, hh % 3, frac);
+      ctx.fillStyle = groundColor(ground, hh % 3);
       // +1 overlap avoids hairline seams between tiles at fractional zooms.
       ctx.fillRect(Math.floor(sx), Math.floor(sy), Math.ceil(z) + 1, Math.ceil(z) + 1);
       if (z >= 10) { // ground detail
-        if (c === "." && hh % 5 === 0 && frac > 0.35) blit(A.tuft, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
-        else if (c !== "." && hh % 4 === 0) blit(A.leaves, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
+        if (c !== "." && hh % 4 === 0) blit(A.leaves, sx + ((hh >> 8) % 10) * z / 12 + 0.1 * z, sy + ((hh >> 12) % 8) * z / 12 + 0.2 * z, 0, 0);
+        // Tufts fill in a fixed, per-slot position (so growth/grazing adds or removes one in place,
+        // never shuffling the ones already there) instead of scattering randomly each tick.
+        for (let i = 0; i < tuftCount; i++) {
+          const th = hash2(x, y, i + 1);
+          blit(A.tuft, sx + (th % 10) * z / 12 + 0.1 * z, sy + ((th >> 8) % 8) * z / 12 + 0.2 * z, 0, 0);
+        }
       }
       if (!live) { // remembered, not currently in view
         ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -196,7 +202,7 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
       ? e.adult ?? e.age >= DEER_FAWN_TICKS
       : e.adult ?? (e.age !== undefined ? e.age >= HUMAN_ADULT_TICKS : sim.tick - e.born >= HUMAN_ADULT_TICKS);
     drawables.push({ key: iy + 0.3, fn: () => {
-      if (e.kind === "deer") return drawDeer(st, sx, sy, adult);
+      if (e.kind === "deer") return drawDeer(st, sx, sy, adult, e.sex);
       if (adult) return drawHuman(e, st, sx, sy);
       const feet = sy + 0.3 * z; // shrink everything about the feet
       ctx.save();
@@ -228,12 +234,12 @@ export function draw(ctx, sim, cam, w, h, opts = {}) {
     ctx.fill();
   }
 
-  function drawDeer(st, sx, sy, adult) {
+  function drawDeer(st, sx, sy, adult, sex) {
     if (Math.abs(st.fx) > 0.3) st.deerFlip = st.fx < 0; // sprite is side-on: face the last horizontal heading
     const k = adult ? 1 : 0.62; // a fawn is a smaller deer
     shadow(sx, sy + 0.3 * z, 0.5 * k);
     const bob = st.moving ? Math.abs(Math.sin(st.phase * Math.PI * 2)) * 0.03 * z : 0;
-    const img = A.deer[st.frame], fy = sy + 0.3 * z - bob, sk = s * k;
+    const img = A.deer[sex === "male" ? "male" : "female"][st.frame], fy = sy + 0.3 * z - bob, sk = s * k;
     if (st.deerFlip) {
       ctx.save();
       ctx.translate(sx, 0);

@@ -15,11 +15,15 @@ const dist2 = (a, b) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 export class Sim {
   // startingDeer: how many deer at tick 0 (default scales with map area); startingGrass: the fraction of
   // each tile's grass capacity present at tick 0. Both only shape the opening: the herd then finds its own size.
+  // deerMax: safety cap on the herd (default scales with area too, same ratio as at the reference 96x96 map,
+  // so a bigger map can actually support a proportionally bigger herd instead of hitting the same flat cap).
   // humanLifespanMin/Spread: the range old-age death is rolled from (overridable, e.g. tiny in tests).
   constructor({ seed, width = 96, height = 96, startingDeer = null, startingGrass = C.GRASS_START_FRACTION,
-                humanLifespanMin = C.HUMAN_LIFESPAN_MIN, humanLifespanSpread = C.HUMAN_LIFESPAN_SPREAD, humanMax = C.HUMAN_MAX }) {
+                deerMax = null, humanLifespanMin = C.HUMAN_LIFESPAN_MIN, humanLifespanSpread = C.HUMAN_LIFESPAN_SPREAD,
+                humanMax = C.HUMAN_MAX }) {
     this.seed = seed;
     this.tick = 0;
+    this.deerMax = deerMax ?? Math.round((C.DEER_MAX * width * height) / (96 * 96));
     this.humanLifespanMin = humanLifespanMin;
     this.humanLifespanSpread = humanLifespanSpread;
     this.humanMax = humanMax;
@@ -81,9 +85,12 @@ export class Sim {
   }
 
   // A deer with its own life: energy, age, and a lifespan rolled now (deterministically).
-  spawnDeer(x, y, { age, energy }) {
+  // sex is rolled 50/50 from the sim's own stream (like lifespan below): deer already draw their
+  // lifespan this way, so this keeps the same pattern rather than adding a second one just for deer.
+  spawnDeer(x, y, { age, energy, sex = null }) {
     return this.spawn("deer", x, y, {
       facing: [0, 1], age, energy, lifespan: C.DEER_LIFESPAN_MIN + this.rng.int(C.DEER_LIFESPAN_SPREAD),
+      sex: sex ?? (this.rng.chance(0.5) ? "male" : "female"),
       breedCooldown: 0, grazing: false, target: null,
     });
   }
@@ -121,7 +128,9 @@ export class Sim {
   // perturbs the random draws that drive the world and the deer.
   // Births use the rest: `at` places someone at an exact position (instead of the nearest free tile to
   // (x, y)), `food` sets their starting food, and `parents` / `generation` record who they came from.
-  addActor(brainFn, x, y, { record = false, age = C.HUMAN_ADULT_TICKS, lifespan = null, at = null, food = C.FOOD_START, parents = null, generation = 0 } = {}) {
+  // sex: "male" | "female", default null meaning roll it (50/50, from a stream keyed to this actor's own
+  // id, like lifespan below -- so adding people never perturbs the sim's own RNG or unrelated baselines).
+  addActor(brainFn, x, y, { record = false, age = C.HUMAN_ADULT_TICKS, lifespan = null, sex = null, at = null, food = C.FOOD_START, parents = null, generation = 0 } = {}) {
     if (!at) { [x, y] = this.findFreeNear(x, y); at = [x + 0.5, y + 0.5]; }
     // tally: what this actor has achieved (for benchmarking brains against each other). It only counts
     // things that already happened in the world, so it isn't part of the state hash.
@@ -131,6 +140,7 @@ export class Sim {
     });
     a.born = this.tick - age; // age is this.tick - born
     a.lifespan = lifespan ?? this.humanLifespanMin + makeRng(deriveSeed(this.seed, "life" + a.id)).int(this.humanLifespanSpread);
+    a.sex = sex ?? (makeRng(deriveSeed(this.seed, "sex" + a.id)).chance(0.5) ? "male" : "female");
     // inheritable: a brain driven from outside (a person at the keyboard, a replay) can't be handed down.
     this.brains.set(a.id, { fn: brainFn, gen: null, dead: false, record, inheritable: !record });
     if (record) this.humanIds.push(a.id);
@@ -152,7 +162,7 @@ export class Sim {
       if (p.birthCooldown > 0) return `${who}_cooldown`;
       return null;
     };
-    const why = problem(a, "proposer") ?? problem(b, "recipient");
+    const why = problem(a, "proposer") ?? problem(b, "recipient") ?? (a.sex === b.sex ? "same_sex" : null);
     if (why) return { ok: false, reason: why };
     if (this.humanCount() >= this.humanMax) return { ok: false, reason: "population_cap" };
 
@@ -401,13 +411,22 @@ export class Sim {
     return d.grazing;
   }
 
-  // Take a bite from the tile it is standing on, if it has any grass. Returns whether it ate.
+  // Energy a single bite is worth at a tile holding `g` grass out of `cap`: scales with lushness (see
+  // DEER_ENERGY_PER_GRASS_MIN/MAX), bounded regardless of how big the meadow is.
+  grassEnergyPerBite(g, cap) {
+    return C.DEER_ENERGY_PER_GRASS_MIN + (C.DEER_ENERGY_PER_GRASS_MAX - C.DEER_ENERGY_PER_GRASS_MIN) * (g / cap);
+  }
+
+  // Take a bite from the tile it is standing on, if it has any grass. A bite is worth more energy the
+  // lusher the tile is -- the amount removed is still flat. Returns whether it ate.
   eatHere(d) {
     const ti = Math.floor(d.y) * this.world.width + Math.floor(d.x);
-    if (this.grass[ti] <= 0) return false;
-    const bite = Math.min(C.DEER_BITE, this.grass[ti]);
+    const g = this.grass[ti];
+    if (g <= 0) return false;
+    const bite = Math.min(C.DEER_BITE, g);
+    const perUnit = this.grassEnergyPerBite(g, this.world.grassCap[ti]);
     this.grass[ti] -= bite;
-    d.energy = Math.min(C.DEER_ENERGY_MAX, d.energy + bite * C.DEER_ENERGY_PER_GRASS);
+    d.energy = Math.min(C.DEER_ENERGY_MAX, d.energy + Math.round(bite * perUnit));
     d.target = null;
     return true;
   }
@@ -448,12 +467,13 @@ export class Sim {
   // A well-fed adult with another adult nearby may have a fawn. The herd's size is limited only by
   // the grass: no food, no energy to breed.
   maybeBreed(d) {
+    if (d.sex !== "female") return; // only a doe carries a fawn; a buck's own eligibility is otherwise unused
     if (d.age < C.DEER_FAWN_TICKS || d.breedCooldown > 0 || d.energy < C.DEER_BREED_ENERGY || d.fleeTicks) return;
-    if (this.liveDeer >= C.DEER_MAX || !this.rng.chance(C.DEER_BREED_CHANCE)) return;
+    if (this.liveDeer >= this.deerMax || !this.rng.chance(C.DEER_BREED_CHANCE)) return;
     const r2 = C.DEER_MATE_RADIUS * C.DEER_MATE_RADIUS;
     let mate = false;
     for (const o of this.entities) {
-      if (o !== d && o.kind === "deer" && !o.removed && o.age >= C.DEER_FAWN_TICKS && dist2(o, d) <= r2) { mate = true; break; }
+      if (o !== d && o.kind === "deer" && !o.removed && o.sex === "male" && o.age >= C.DEER_FAWN_TICKS && dist2(o, d) <= r2) { mate = true; break; }
     }
     if (!mate) return;
     d.energy -= C.DEER_BIRTH_COST;
@@ -469,7 +489,10 @@ export class Sim {
   // A few tiles regain grass each tick, each tile once per GRASS_REGROW_PERIOD ticks (staggered).
   growGrass() {
     const cap = this.world.grassCap, growth = this.world.grassGrowth, g = this.grass, P = C.GRASS_REGROW_PERIOD;
-    for (let i = this.tick % P; i < g.length; i += P) if (g[i] < cap[i]) g[i] = Math.min(cap[i], g[i] + growth[i]);
+    for (let i = this.tick % P; i < g.length; i += P) {
+      if (g[i] >= cap[i]) continue;
+      g[i] = Math.min(cap[i], g[i] + growth[i]);
+    }
   }
 
   dropStick() {

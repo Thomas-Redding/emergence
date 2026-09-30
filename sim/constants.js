@@ -41,12 +41,38 @@ export const SENSE_RADIUS = 1.5;
 export const HUMAN_FOV_COS = 0.342; // half-angle 70deg  -> 140deg cone
 export const DEER_FOV_COS = -0.866; // half-angle 150deg -> 300deg (blind spot straight behind)
 
-// ---- Grass: what deer eat. Each non-tree tile holds 0..cap units, regrowing slowly. ----
+// ---- Grass: what deer eat. Held only in meadow patches (below), each patch tile 0..cap units,
+// regrowing slowly. (GRASS_CAP_PLAINS/FOREST are also used directly by tests that build their own
+// uniform-grass test arenas, bypassing worldgen's patches entirely.) ----
 export const GRASS_CAP_PLAINS = 20;
 export const GRASS_CAP_FOREST = 10; // forest floor is sparser
 export const GRASS_GROWTH_PLAINS = 2; // units regained per visit...
 export const GRASS_GROWTH_FOREST = 1;
 export const GRASS_REGROW_PERIOD = 1000; // ...and each tile is visited once per this many ticks (staggered)
+
+// ---- Meadows: grass grows on a scattered fraction of tiles, not every tile. This is why: a deer
+// grazes opportunistically on whatever tile it is standing on, tick by tick, as it walks -- so if
+// EVERY tile carries a little grass, a deer's whole wander path gets nibbled, tracing a visible line
+// wherever it went. Each non-tree tile independently has a GRASS_PATCH_COVERAGE chance of being a
+// "meadow" tile at world-gen time (not clustered into contiguous patches): scattered because a loose,
+// occasional trace of grazed tiles along a deer's path is a feature, not a bug -- it's what would make
+// tracking a deer possible later, just not trivial (an unbroken clustered blob would either show
+// nothing at all between meadows, or a dead giveaway solid line once inside one).
+// Each meadow tile holds about 1/GRASS_PATCH_COVERAGE times as much grass as the old uniform tiles
+// did, so total grass supply is about the same as before, just held by fewer tiles.
+// Regrowth-per-visit is deliberately NOT scaled up to match (still GRASS_GROWTH_PLAINS/FOREST above):
+// a grazed meadow tile takes much longer, relative to its own capacity, to refill than a single old
+// tile did, so under any ordinary ambient grazing it never reaches full uniform lushness.
+export const GRASS_PATCH_COVERAGE = 0.15; // chance any given non-tree tile is a meadow tile
+export const GRASS_PATCH_CAP_PLAINS = 130; // ~ GRASS_CAP_PLAINS / GRASS_PATCH_COVERAGE
+export const GRASS_PATCH_CAP_FOREST = 65; // ~ GRASS_CAP_FOREST / GRASS_PATCH_COVERAGE
+// Growth-per-visit is ALSO scaled up by ~1/coverage (so total map-wide regrowth throughput, not just
+// standing capacity, comes out close to what the old uniform tiles produced -- a first "leave it
+// unscaled" attempt starved the whole herd even with zero hunters, since concentrating grass into 15%
+// of the tiles cut total throughput to about that fraction of before). Recovery TIME per tile (cap /
+// growth) ends up about the same as an old uniform tile's did.
+export const GRASS_PATCH_GROWTH_PLAINS = 18;
+export const GRASS_PATCH_GROWTH_FOREST = 10;
 
 // How the world starts (only shapes the opening; the herd then finds its own size).
 // Chosen with a parameter sweep (8 seeds): the steady herd (~120 on the default map) doesn't depend on
@@ -60,8 +86,14 @@ export const DEER_ENERGY_MAX = 1000;
 export const DEER_METAB_EVERY = 4; // one energy lost per this many ticks (starve in ~4000 ticks)
 export const DEER_HUNGRY = 600; // start grazing below this...
 export const DEER_FULL = 950; // ...and stop at this
-export const DEER_BITE = 1; // grass units eaten per tick while grazing
-export const DEER_ENERGY_PER_GRASS = 2;
+export const DEER_BITE = 1; // grass units eaten per tick while grazing (removal rate is flat: see below)
+// How much energy a bitten unit of grass is worth depends on the tile's lushness (grass / cap), not
+// just a flat rate: a bite from a nearly-bare tile is worth less than a bite from a lush one. This is
+// what makes "go a bit farther for much better grass" a real, boundable tradeoff -- richness maxes out
+// at DEER_ENERGY_PER_GRASS_MAX regardless of how big the meadow is, unlike raw standing grass (which
+// scales with meadow size and would make one huge meadow look unbeatable from anywhere on the map).
+export const DEER_ENERGY_PER_GRASS_MIN = 2; // at a bare-minimum (DEER_MIN_PATCH) tile
+export const DEER_ENERGY_PER_GRASS_MAX = 5; // at a fully lush (cap) tile
 export const DEER_MIN_PATCH = 3; // a tile is worth walking to if it has at least this much
 export const DEER_SEARCH_NEAR = 8; // tiles: look this far for grass first, then...
 export const DEER_SEARCH_FAR = 20; // ...this far

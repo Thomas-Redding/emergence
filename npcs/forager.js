@@ -67,15 +67,16 @@ function* seekMate(obs, rng, mem, fam) {
     if (obs.proposals.outgoing) { obs = yield { type: "wait" }; continue; } // waiting for an answer
 
     const mine = new Set(obs.family.kids.map((k) => k.id));
-    const ok = (id, adult) => adult && !mine.has(id) && !(mem.blocked[id] > obs.tick);
-    const partner = nearest(obs, obs.view.entities.filter((e) => e.kind === "human" && ok(e.id, e.adult)));
+    // A partner has to be an adult of the opposite sex, not your own child, and not someone who recently said no.
+    const ok = (id, adult, sex) => adult && sex !== obs.self.sex && !mine.has(id) && !(mem.blocked[id] > obs.tick);
+    const partner = nearest(obs, obs.view.entities.filter((e) => e.kind === "human" && ok(e.id, e.adult, e.sex)));
     if (partner) {
       if (dist(obs.self, partner) <= obs.reach.talk * 0.8) { obs = yield { type: "wait", propose: { to: partner.id, kind: "mate" } }; continue; }
       obs = yield moveToward(obs, partner.x, partner.y, { within: obs.reach.talk * 0.6 }) ?? { type: "wait" };
       continue;
     }
-    // no one in sight: go where an adult was last seen, or wander
-    const seenAdults = Object.entries(obs.family.people).filter(([id, p]) => ok(Number(id), p.adult) && obs.tick - p.tick < 3000);
+    // no one in sight: go where an opposite-sex adult was last seen, or wander
+    const seenAdults = Object.entries(obs.family.people).filter(([id, p]) => ok(Number(id), p.adult, p.sex) && obs.tick - p.tick < 3000);
     const last = seenAdults.sort((a, b) => b[1].tick - a[1].tick)[0]?.[1];
     const toward = last ? moveToward(obs, last.x, last.y, { within: 3 }) : null;
     if (toward) obs = yield toward;
@@ -154,7 +155,13 @@ export function makeForager({ eat = "no-waste", gate = "reserve", reserve = 2, f
   // Answer proposals as they come in (riding along on whatever it is doing).
   const reply = (obs) => {
     const asked = obs.proposals.incoming.find((p) => p.kind === "mate");
-    return asked ? { to: asked.from, accept: wantsChild(obs, fam) } : null;
+    if (!asked) return null;
+    // Decline outright if the asker is visibly (or, failing that, rememberedly) the same sex: no point
+    // spending the attempt on a proposal the sim will refuse anyway. If their sex isn't known at all,
+    // fall through to the ordinary decision -- the sim enforces the rule regardless.
+    const seen = obs.view.entities.find((e) => e.id === asked.from) ?? obs.family.people[asked.from];
+    if (seen && seen.sex === obs.self.sex) return { to: asked.from, accept: false };
+    return { to: asked.from, accept: wantsChild(obs, fam) };
   };
   return withMemory(withChildhood(withFamily(brain, { reply })));
 }

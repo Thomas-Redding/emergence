@@ -77,8 +77,8 @@ function human(tunic, dir, frame) {
   return c;
 }
 
-// 18x14, facing right, feet at the bottom.
-function deer(frame) {
+// 18x14, facing right, feet at the bottom. Antlers only on a buck (male) -- does don't grow them.
+function deer(frame, male) {
   const [c, g] = mk(18, 14);
   const BODY = "#a0693a", BELLY = "#e8d2b0", DARK = "#6e4522", LEG = "#5a3a1c", ANT = "#d8c8a0";
   // legs: diagonal pairs lift alternately
@@ -98,9 +98,11 @@ function deer(frame) {
   rect(g, DARK, 16, 3, 2, 2); // snout
   rect(g, "#111", 15, 3, 1, 1); // eye
   rect(g, BODY, 13, 1, 1, 1); // ear
-  rect(g, ANT, 14, 0, 1, 2); // antlers
-  rect(g, ANT, 16, 0, 1, 2);
-  rect(g, ANT, 15, 0, 1, 1);
+  if (male) {
+    rect(g, ANT, 14, 0, 1, 2); // antlers
+    rect(g, ANT, 16, 0, 1, 2);
+    rect(g, ANT, 15, 0, 1, 1);
+  }
   return c;
 }
 
@@ -199,7 +201,7 @@ export function buildAtlas() {
     A.humans[t] = {};
     for (const dir of ["down", "up", "side"]) A.humans[t][dir] = [0, 1, 2, 3].map((f) => human(t, dir, f));
   }
-  A.deer = [0, 1, 2, 3].map(deer);
+  A.deer = { male: [0, 1, 2, 3].map((f) => deer(f, true)), female: [0, 1, 2, 3].map((f) => deer(f, false)) };
   A.fireLit = [0, 1, 2].map((f) => fire(f, true));
   A.fireOut = [0, 1].map((f) => fire(f, false));
   A.trunk = treeTrunk();

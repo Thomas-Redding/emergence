@@ -1,5 +1,8 @@
 import { makeRng, deriveSeed } from "./rng.js";
-import { GRASS_CAP_PLAINS, GRASS_CAP_FOREST, GRASS_GROWTH_PLAINS, GRASS_GROWTH_FOREST } from "./constants.js";
+import {
+  GRASS_PATCH_COVERAGE, GRASS_PATCH_CAP_PLAINS, GRASS_PATCH_CAP_FOREST,
+  GRASS_PATCH_GROWTH_PLAINS, GRASS_PATCH_GROWTH_FOREST,
+} from "./constants.js";
 
 export const PLAINS = 0;
 export const FOREST = 1;
@@ -24,9 +27,13 @@ function valueNoise(seed, x, y) {
 export function generateWorld(seed, width, height) {
   const noiseSeed = deriveSeed(seed, "terrain") | 0;
   const rng = makeRng(deriveSeed(seed, "worldgen-objects"));
+  const meadowRng = makeRng(deriveSeed(seed, "meadow"));
   const terrain = new Uint8Array(width * height);
   const treeAt = new Uint8Array(width * height);
   const trees = [];
+  // Grass lives only in meadows: a scattered ~GRASS_PATCH_COVERAGE fraction of the non-tree tiles (see
+  // the comment at GRASS_PATCH_COVERAGE for why it's an independent per-tile roll, not clustered).
+  const grassCap = new Uint8Array(width * height), grassGrowth = new Uint8Array(width * height);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -37,16 +44,11 @@ export function generateWorld(seed, width, height) {
       if (terrain[i] === FOREST && rng.chance(0.35)) {
         treeAt[i] = 1;
         trees.push({ x, y });
+      } else if (meadowRng.chance(GRASS_PATCH_COVERAGE)) {
+        grassCap[i] = terrain[i] === FOREST ? GRASS_PATCH_CAP_FOREST : GRASS_PATCH_CAP_PLAINS;
+        grassGrowth[i] = terrain[i] === FOREST ? GRASS_PATCH_GROWTH_FOREST : GRASS_PATCH_GROWTH_PLAINS;
       }
     }
-  }
-
-  // How much grass each tile can hold (none under trees) and how fast it regrows.
-  const grassCap = new Uint8Array(width * height), grassGrowth = new Uint8Array(width * height);
-  for (let i = 0; i < grassCap.length; i++) {
-    if (treeAt[i]) continue;
-    grassCap[i] = terrain[i] === FOREST ? GRASS_CAP_FOREST : GRASS_CAP_PLAINS;
-    grassGrowth[i] = terrain[i] === FOREST ? GRASS_GROWTH_FOREST : GRASS_GROWTH_PLAINS;
   }
   return { width, height, terrain, treeAt, trees, grassCap, grassGrowth };
 }

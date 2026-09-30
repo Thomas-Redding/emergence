@@ -152,7 +152,7 @@ export function* explore(obs, rng, steps = 24, until = null) {
 //          falls at the ordinary rate, and rises by a meal each time a `give` of cooked meat succeeds.
 //          dependent: still a child (younger than the adulthood age).
 //   lastBirthTick: when you last had a child (null if never).
-//   people: { [id]: { x, y, tick, adult } } everyone you have seen, and where and when you last saw them.
+//   people: { [id]: { x, y, tick, adult, sex } } everyone you have seen, and where and when you last saw them.
 // reply(obs): called each tick a reply is possible; return { to, accept } to answer a proposal, or null.
 export function withFamily(brainFn, { reply = null } = {}) {
   return function* (obs, rng) {
@@ -187,7 +187,7 @@ export function withFamily(brainFn, { reply = null } = {}) {
       for (const k of fam.kids) k.dependent = o.tick - k.bornTick < adultAge;
       for (const e of o.view.entities) {
         if (e.kind !== "human") continue;
-        fam.people[e.id] = { x: e.x, y: e.y, tick: o.tick, adult: e.adult };
+        fam.people[e.id] = { x: e.x, y: e.y, tick: o.tick, adult: e.adult, sex: e.sex };
         const kid = fam.kids.find((k) => k.id === e.id);
         if (kid) kid.lastSeen = { x: e.x, y: e.y, tick: o.tick };
       }

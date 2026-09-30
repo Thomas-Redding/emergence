@@ -3,23 +3,32 @@
 // scores a brain over a fixed short window, this watches the whole system for a long time to answer
 // a different question: does the population settle into something stable, or does it crash?
 //
-// usage: node tools/population.mjs [seeds=6] [ticks=150000] [npcs=6] [layout=spread]
+// usage: node tools/population.mjs [seeds=6] [ticks=150000] [npcs=6] [layout=spread] [mapSize=96]
+//
+// mapSize keeps the founder count (and so the dominant per-tick cost: human brains) fixed while
+// changing the world's area. A bigger map at the same deer-per-1000-tiles density means more total
+// deer-carrying-capacity relative to a fixed number of hunters, AND lets spatial refuges emerge
+// (places the hunters simply haven't reached yet, where deer can breed undisturbed) -- both real,
+// non-cognitive reasons predator-prey systems in nature avoid collapsing as often as a small, fully
+// covered map does. Deer/grass are cheap per-tick regardless of map size; only grass regrowth
+// (O(area/GRASS_REGROW_PERIOD) per tick) and one-time world generation scale with it.
 import { Sim } from "../sim/sim.js";
 import { forager, foragerFamily } from "../npcs/forager.js";
 import { layoutPositions } from "./harness.mjs";
 
 const seeds = Number(process.argv[2] ?? 6), ticks = Number(process.argv[3] ?? 150000);
 const npcs = Number(process.argv[4] ?? 6), layout = process.argv[5] ?? "spread";
+const mapSize = Number(process.argv[6] ?? 96);
 const every = Math.max(1, Math.floor(ticks / 12));
 
 const humanCount = (s) => s.humanCount();
 const deerCount = (s) => { let n = 0; for (const e of s.entities) if (e.kind === "deer" && !e.removed) n++; return n; };
 
 let humanExtinct = 0, deerExtinct = 0, worst = [];
-console.log(`population: ${seeds} seed(s) x ${ticks} ticks, ${npcs} founder(s) [${layout}], brain: forager-family`);
+console.log(`population: ${seeds} seed(s) x ${ticks} ticks, ${npcs} founder(s) [${layout}], ${mapSize}x${mapSize} map, brain: forager-family`);
 console.log(`(counts sampled every ${every} ticks; H = humans, D = deer)`);
 for (let seed = 1; seed <= seeds; seed++) {
-  const s = new Sim({ seed });
+  const s = new Sim({ seed, width: mapSize, height: mapSize });
   const pos = layoutPositions(npcs, layout, s.world.width, s.world.height);
   pos.forEach(([x, y]) => s.addActor(foragerFamily, x, y));
   const hSeries = [], dSeries = [];

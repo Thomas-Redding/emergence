@@ -65,7 +65,7 @@ const withTicksLeft = (p, tick) => (p ? { ...p, left: Math.max(0, p.expires - ti
 // isPlayer: also show which actions are available, and any pending proposal to answer or wait on
 // (for a selected NPC we only show its inventory).
 export function buildHud(obs, { isPlayer }) {
-  const model = { age: ageOf(obs), food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [], speech: null };
+  const model = { age: ageOf(obs), sex: obs.self.sex, food: foodOf(obs.self), slots: slotsOf(obs.self.inventory), fire: fireOf(obs), actions: [], speech: null };
   if (isPlayer) {
     const plans = actionPlans(obs);
     model.actions = ACTION_KEYS.map((k) => ({ key: k.toUpperCase(), label: plans[k].label, hold: plans[k].hold, enabled: !!plans[k].action, why: plans[k].why ?? null }));
